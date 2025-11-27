@@ -89,6 +89,30 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlru
 
 Open `http://localhost:5000` to view runs and artifacts.
 
+**Using MLflow**
+
+- **Install**: MLflow is optional. Install with `pip` if you want to enable logging:
+
+```cmd
+pip install mlflow
+```
+
+- **Enable during training**: MLflow can be enabled either in the JSON config (`training_args.use_mlflow = true`) or via the training CLI flags. The CLI flags override config values:
+
+```cmd
+python train.py --config configs/dev.json --model-dir models/my_run --use-mlflow
+```
+
+- **Set experiment / tracking URI**: By default the project maps file-style URIs to an on-disk SQLite DB at `mlflow.db` and stores artifacts under `./mlruns`. You can override the experiment name and tracking URI via config or CLI:
+
+```cmd
+python train.py --config configs/dev.json --model-dir models/my_run --use-mlflow --mlflow-experiment my-experiment --mlflow-tracking-uri sqlite:///C:\path\to\mlflow.db
+```
+
+- **Defaults & behavior**: If no tracking URI is provided, the trainer will use `sqlite:///mlflow.db` and `./mlruns` as the artifact root. The `training/mlflow_logger.py` wrapper will silently no-op if `mlflow` isn't installed, so enabling `--use-mlflow` without installing the package will not crash the run (it will log that MLflow is disabled).
+
+- **What gets logged**: The trainer logs selected metrics each iteration, optional artifacts (checkpoints and final `training_history` JSON), and run-level params such as training hyperparameters. Use `mlflow_log_interval` in your config to control metric logging frequency.
+
 Notes on determinism
 
 - Setting `CUBLAS_WORKSPACE_CONFIG` and limiting BLAS/OpenMP threads reduces GPU nondeterminism, but some ops may still be non-deterministic or unsupported in deterministic mode. If `torch.use_deterministic_algorithms(True)` raises an error, it indicates an unsupported op; consider running on CPU for full reproducibility or replacing the offending op.
