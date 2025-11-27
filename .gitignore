@@ -1,0 +1,14 @@
+__pycache__/
+.github/
+models/
+
+.ipynb_checkpoints
+*.log
+
+*.pt
+checkpoint_*.pt
+model_*.pt
+optimizer_*.pt
+
+mlruns/
+mlflow.db

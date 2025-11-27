@@ -1,0 +1,45 @@
+{
+  "game_config": {
+    "row_count": 8,
+    "col_count": 8,
+    "buffer_count": 2,
+    "draw_move_limit": 50,
+    "repetition_limit": 3,
+    "history_timesteps": 4
+  },
+  
+  "model_config": {
+    "num_resBlocks": 6,
+    "num_hidden": 48,
+    "use_checkpoint": true
+  },
+  
+  "training_args": {
+    "C": 2,
+    "num_searches": 200,
+    "num_iterations": 15,
+    "num_self_play_iterations": 20,
+    "num_epochs": 10,
+    "batch_size": 32,
+    "initial_temperature": 1.3,
+    "final_temperature": 0.8,
+    "use_temperature": true,
+    "dirichlet_epsilon": 0.20,
+    "dirichlet_alpha": 0.4,
+    "lr_decay_steps": 5,
+    "lr_decay_factor": 0.85,
+    "use_mlflow": false,
+    "mlflow_log_interval": 1,
+    "mlflow_experiment_name": "checkers-dev",
+    "mlflow_tracking_uri": null,
+    "seed": 42,
+    "deterministic": false
+  },
+  
+  "optimizer_config": {
+    "lr": 0.003,
+    "weight_decay": 0.0001
+  },
+  
+  "use_mixed_precision": true
+}
