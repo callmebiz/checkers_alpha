@@ -23,7 +23,7 @@ class TrainingMetrics:
         }
     
     def update_history(self, iteration, policy_loss, value_loss, total_loss, learning_rate, 
-                      game_stats, selfplay_time, training_time, total_time,
+                      game_stats, selfplay_time, training_time, total_time, inference_time=0.0,
                       epoch_losses=None, epoch_timing=None, grad_norm=None, max_grad=None,
                       gpu_stats=None, checkpoints=None):
         """Update training history with metrics from current iteration"""
@@ -35,6 +35,7 @@ class TrainingMetrics:
         self.training_history['game_stats'].append(game_stats)
         self.training_history['timing'].append({
             'selfplay_time': selfplay_time,
+            'inference_time': inference_time,
             'training_time': training_time,
             'total_time': total_time
         })
@@ -123,7 +124,7 @@ class TrainingMetrics:
             f"Policy Loss {iteration_stats['policy_loss']:.3f} Value Loss {iteration_stats['value_loss']:.3f} Total Loss {total_loss:.3f} | "
             f"LR {iteration_stats['learning_rate']:.4f} | "
             f"Time {iteration_stats['total_time']:.1f}s | "
-            f"Selfplay {iteration_stats.get('selfplay_time', 0):.2f}s Train {iteration_stats.get('training_time', 0):.2f}s | "
+            f"Selfplay {iteration_stats.get('selfplay_time', 0):.2f}s Inference {iteration_stats.get('inference_time', 0):.2f}s Train {iteration_stats.get('training_time', 0):.2f}s | "
             f"ETA {time_remaining} | "
             f"Captures {cap} Promotions {prom} MultiJumps {mj} | "
             f"Max Win Streak {max_streak} | "
@@ -134,21 +135,5 @@ class TrainingMetrics:
         # summary is always present even if logging configuration changes.
         try:
             self.logger.info(msg)
-        except Exception:
-            pass
-
-        try:
-            # Append directly to the log file used by Trainer (best-effort).
-            # Include a timestamp and level prefix to match the logger format
-            # so each iteration line appears like other logged lines.
-            from datetime import datetime
-            log_file = os.path.join(self.log_dir, f"training_{self.timestamp}.log")
-            now = datetime.now()
-            # format microseconds -> milliseconds (3 digits)
-            ms = int(now.microsecond / 1000)
-            ts = now.strftime(f"%Y-%m-%d %H:%M:%S,{ms:03d}")
-            line = f"{ts} - INFO - {msg}\n"
-            with open(log_file, 'a', encoding='utf-8') as lf:
-                lf.write(line)
         except Exception:
             pass

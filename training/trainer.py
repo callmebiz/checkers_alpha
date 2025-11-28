@@ -348,38 +348,32 @@ class Trainer:
             
             if use_parallel:
                 # Parallel self-play
-                try:
-                    results = self.self_play_manager.play_games_parallel(
-                        self.args['num_self_play_iterations'],
-                        starting_player,
-                        i,
-                        self.args,
-                        self.initial_state,
-                        num_processes
-                    )
-                    
-                    # Process results
-                    for game_memory, final_outcome_p1, _, game_stats in results:
-                        if len(game_memory) > 0:
-                            memory += game_memory
-                            successful_games += 1
-                            game_stats_list.append(game_stats)
-                            outcome_sequence.append(final_outcome_p1)
-                            
-                            # Track game outcomes
-                            if final_outcome_p1 == 1:
-                                game_outcomes['p1_wins'] += 1
-                            elif final_outcome_p1 == -1:
-                                game_outcomes['p_neg1_wins'] += 1
-                            else:
-                                game_outcomes['draws'] += 1
-                                
-                    print(f"Parallel self-play completed: {successful_games}/{self.args['num_self_play_iterations']} games")
-                    
-                except Exception as e:
-                    self.logger.error(f"Error in parallel self-play: {e}")
-                    self.logger.info("Falling back to sequential self-play")
-                    use_parallel = False
+                results = self.self_play_manager.play_games_parallel(
+                    self.args['num_self_play_iterations'],
+                    starting_player,
+                    i,
+                    self.args,
+                    self.initial_state,
+                    num_processes
+                )
+
+                # Process results
+                for game_memory, final_outcome_p1, _, game_stats in results:
+                    if len(game_memory) > 0:
+                        memory += game_memory
+                        successful_games += 1
+                        game_stats_list.append(game_stats)
+                        outcome_sequence.append(final_outcome_p1)
+
+                        # Track game outcomes
+                        if final_outcome_p1 == 1:
+                            game_outcomes['p1_wins'] += 1
+                        elif final_outcome_p1 == -1:
+                            game_outcomes['p_neg1_wins'] += 1
+                        else:
+                            game_outcomes['draws'] += 1
+
+                print(f"Parallel self-play completed: {successful_games}/{self.args['num_self_play_iterations']} games")
             
             if not use_parallel:
                 # Sequential self-play (original implementation)
@@ -444,6 +438,7 @@ class Trainer:
             total_captures = int(sum(gs.get('captures', 0) for gs in game_stats_list))
             total_promotions = int(sum(gs.get('promotions', 0) for gs in game_stats_list))
             total_multi_jumps = int(sum(gs.get('multi_jumps', 0) for gs in game_stats_list))
+            total_inference_time = float(sum(gs.get('inference_time', 0.0) for gs in game_stats_list))
 
             # compute max win streaks in the sequence of game outcomes
             max_streak_p1 = 0
@@ -572,6 +567,7 @@ class Trainer:
                 'total_loss': avg_total_loss,
                 'learning_rate': current_lr,
                 'selfplay_time': selfplay_time,
+                'inference_time': total_inference_time,
                 'training_time': training_time,
                 'total_time': iteration_time,
                 'captures_total': total_captures,
@@ -615,6 +611,7 @@ class Trainer:
             self.metrics.update_history(
                 i, avg_policy_loss, avg_value_loss, avg_total_loss, current_lr,
                 iteration_stats, selfplay_time, training_time, iteration_time,
+                inference_time=total_inference_time,
                 epoch_losses=epoch_losses, epoch_timing=epoch_timing,
                 grad_norm=grad_norm, max_grad=max_grad,
                 checkpoints=checkpoints
@@ -644,7 +641,12 @@ class Trainer:
                         'draw_rate': draw_rate,
                         'avg_game_length': avg_game_length,
                         'total_samples': len(memory),
-                        'learning_rate': current_lr
+                        'learning_rate': current_lr,
+                        # Timing breakdowns: useful to track performance over iterations
+                        'selfplay_time': selfplay_time,
+                        'inference_time': total_inference_time,
+                        'training_time': training_time,
+                        'total_time': iteration_time
                     }
                     try:
                         mlfl.log_metrics(metrics_to_log, step=i)

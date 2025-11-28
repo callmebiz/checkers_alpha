@@ -2,6 +2,7 @@
 
 import numpy as np
 import torch
+import time
 
 
 class Node:
@@ -90,10 +91,13 @@ class MCTS:
         root = Node(self.game, self.args, state, player)
         root.visit_count = 1  # Set visit count after creation
         
-        # Get initial policy and value from neural network
+        # Get initial policy and value from neural network (measure inference time)
+        model_time = 0.0
+        start = time.time()
         policy, value = self.model(
             torch.tensor(self.state_encoder.encode_state(state, player), device=self.model.device).unsqueeze(0)
         )
+        model_time += time.time() - start
         policy = torch.softmax(policy, axis=1).squeeze(0).cpu().numpy()
         
         # Add Dirichlet noise if requested
@@ -124,11 +128,13 @@ class MCTS:
             _, is_terminal = self.game.get_value_and_terminated(node.state, node.player)
             
             if not is_terminal:
-                # Evaluation
+                # Evaluation (measure inference time)
+                start = time.time()
                 policy, value = self.model(
                     torch.tensor(self.state_encoder.encode_state(node.state, node.player), 
                                device=self.model.device).unsqueeze(0)
                 )
+                model_time += time.time() - start
                 policy = torch.softmax(policy, axis=1).squeeze(0).cpu().numpy()
                 valid_moves = self.game.get_valid_moves(node.state, node.player)
                 policy *= valid_moves
@@ -164,6 +170,13 @@ class MCTS:
                 if np.sum(visit_counts) > 0:
                     action_probs = visit_counts / np.sum(visit_counts)
         
+        # Store inference time for external inspection
+        self._last_search_inference_time = float(model_time)
+
         if return_visit_counts:
             return action_probs, visit_counts
         return action_probs
+
+    def get_last_search_inference_time(self):
+        """Return the wall-clock seconds spent in model forward calls during the last search."""
+        return getattr(self, '_last_search_inference_time', 0.0)

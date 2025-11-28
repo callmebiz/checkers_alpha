@@ -16,9 +16,9 @@
   
   "training_args": {
     "C": 2,
-    "num_searches": 10,
-    "num_iterations": 2,
-    "num_self_play_iterations": 3,
+    "num_searches": 2,
+    "num_iterations": 3,
+    "num_self_play_iterations": 4,
     "num_epochs": 4,
     "batch_size": 16,
     "initial_temperature": 1.4,

@@ -36,6 +36,8 @@ def main():
     parser.add_argument('--resume-from', type=str, default=None, help='Path to checkpoint to resume from')
     parser.add_argument('--no-cuda', action='store_true', help='Disable CUDA even if available')
     parser.add_argument('--seed', type=int, default=None, help='Random seed (default: None -> random)')
+    parser.add_argument('--parallel', action='store_true', help='Enable parallel self-play (uses multiprocessing)')
+    parser.add_argument('--parallel-processes', type=int, default=None, help='Number of parallel worker processes to use for self-play')
     # MLflow overrides
     parser.add_argument('--use-mlflow', action='store_true', help='Enable MLflow logging (overrides config)')
     parser.add_argument('--mlflow-experiment', type=str, default=None, help='MLflow experiment name (overrides config)')
@@ -123,7 +125,14 @@ def main():
 
     os.makedirs(model_dir, exist_ok=True)
 
-    trainer.train(model_dir=model_dir, resume_from=args.resume_from, config_path=args.config)
+    # Pass parallelism flags into Trainer.train()
+    trainer.train(
+      model_dir=model_dir,
+      resume_from=args.resume_from,
+      use_parallel=args.parallel,
+      num_processes=args.parallel_processes,
+      config_path=args.config
+    )
 
 
 if __name__ == '__main__':
