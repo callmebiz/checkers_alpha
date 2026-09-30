@@ -1,263 +1,560 @@
-# core/game.py
+"""American checkers (English draughts) rules on 32-square bitboards.
 
-import numpy as np
-from collections import defaultdict
+Board
+-----
+Only the 32 dark squares are playable. They use standard PDN numbering: 1-32 in
+text, 0-31 in code. Each player's near-left corner is dark (square 29 for White,
+square 4 for Black)::
+
+         1   2   3   4       row 0   Black starts on 1-12, moves down, first
+       5   6   7   8         row 1
+         9  10  11  12
+      13  14  15  16
+        17  18  19  20
+      21  22  23  24
+        25  26  27  28
+      29  30  31  32         row 7   White starts on 21-32 and moves up
+
+A *bitboard* is an int whose bit ``s`` is set when square ``s`` (0-based) holds
+a piece. Three bitboards describe the pieces: ``black``, ``white`` and ``kings``
+(either color). Set operations are bit operations: ``black | white`` is every
+occupied square, ``black & kings`` is Black's kings, ``x & -x`` isolates the
+lowest set bit.
+
+Rules
+-----
+- Men move one square diagonally forward; kings move diagonally both ways.
+- Captures jump an adjacent enemy piece onto the empty square beyond. Capturing
+  is compulsory: if any capture exists, only captures are legal.
+- After a capture, the same piece must keep capturing while it can (a
+  multi-jump).
+- A man reaching the far row is crowned; this ends the turn even mid multi-jump.
+- The side to move with no legal move (including no pieces) loses.
+- Draw after ``Rules.draw_plies`` plies with no capture or man move, or when the
+  same position occurs ``Rules.repetition_limit`` times.
+
+Actions
+-------
+An action is one *hop*: a step or a single jump. It is encoded as ``square * 8 +
+direction * 2 + is_jump`` (256 values). Only 170 of them fit on the board; the
+rest are never legal. A multi-jump is several jump actions by the same side, and
+``Position.jump_sq`` marks the piece that must continue.
+
+Positions are immutable: ``pos.play(action)`` returns a new ``Position``. Every
+position in a game is produced by ``Position.initial()``,
+``Position.from_fen()`` (validated) or ``play()`` of a legal action, so the game
+never holds an illegal state.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from dataclasses import dataclass
+
+BLACK, WHITE = 0, 1
+COLOR_NAMES = ('black', 'white')
+NUM_SQUARES = 32
+ACTION_SIZE = 256
+FULL = (1 << NUM_SQUARES) - 1
+
+# Directions as (row delta, col delta). Row 0 is Black's back row, so "north" is
+# toward it.
+NW, NE, SW, SE = 0, 1, 2, 3
+DIRECTIONS = ((-1, -1), (-1, 1), (1, -1), (1, 1))
+DIRECTION_NAMES = ('NW', 'NE', 'SW', 'SE')
+# Indexed by color: the directions its men may move
+FORWARD = ((SW, SE), (NW, NE))
+# Index of the king entry in the move tables, after the BLACK and WHITE men
+KING_TABLE = 2
 
 
-class Checkers:
-    def __init__(self, row_count=8, col_count=8, buffer_count=2,
-                 draw_move_limit=50, repetition_limit=3, history_timesteps=4):
-        self.row_count = row_count
-        self.col_count = col_count
-        self.buffer_count = buffer_count
-        self.draw_move_limit = draw_move_limit
-        self.repetition_limit = repetition_limit
-        self.history_timesteps = history_timesteps
+@dataclass(frozen=True)
+class Rules:
+    """Configurable draw rules. Movement and capture rules are fixed."""
 
-        self.playable_positions = []
-        self.move_map = {}
+    draw_plies: int = 80  # plies with no capture or man move (40 moves each)
+    repetition_limit: int = 3
 
-        self.move_names = {
-            (-1, -1): "Up-Left", (-1, 1): "Up-Right",
-            (1, -1): "Down-Left", (1, 1): "Down-Right",
-            (-2, -2): "Jump Up-Left", (-2, 2): "Jump Up-Right",
-            (2, -2): "Jump Down-Left", (2, 2): "Jump Down-Right"
-        }
 
-        self.action_size = self.initialize_action_encoding()
+DEFAULT_RULES = Rules()
 
-    def initialize_action_encoding(self):
-        action_size = 0
-        for r in range(self.row_count):
-            for c in range(self.col_count):
-                # Only consider playable positions (black squares)
-                if (r + c) % 2 == 0:
-                    continue
-                
-                # Check all possible moves from this position
-                valid_moves = []
-                for (dr, dc) in self.move_names.keys():
-                    new_r, new_c = r + dr, c + dc
-                    
-                    # Check if the move is within bounds
-                    if 0 <= new_r < self.row_count and 0 <= new_c < self.col_count:
-                        valid_moves.append((new_r, new_c, action_size, dr, dc))
-                        action_size += 1
 
-                # Store the playable position and its valid moves
-                self.playable_positions.append((r, c))
-                self.move_map[(r, c)] = valid_moves
+def square_to_rc(s: int) -> tuple[int, int]:
+    """(row, col) of square ``s`` (0-based) on the 8x8 board."""
+    r = s >> 2
+    return r, 2 * (s & 3) + (1 - (r & 1))
 
-        return action_size
 
-    def get_initial_state(self):
-        board = np.zeros((self.row_count, self.col_count), dtype=int)
-        player_rows = (self.row_count - self.buffer_count) // 2
+def rc_to_square(r: int, c: int) -> int:
+    """Square index at (row, col); -1 for a light or off-board square."""
+    if not (0 <= r < 8 and 0 <= c < 8) or (r + c) % 2 == 0:
+        return -1
+    return r * 4 + c // 2
 
-        # Place pieces for Player -1 (Top)
-        for r in range(player_rows):
-            for c in range(self.col_count):
-                if (r + c) % 2 == 1:
-                    board[r, c] = -1  
 
-        # Place pieces for Player 1 (Bottom)
-        for r in range(self.row_count - player_rows, self.row_count):
-            for c in range(self.col_count):
-                if (r + c) % 2 == 1:
-                    board[r, c] = 1  
+def make_action(square: int, direction: int, is_jump: bool | int) -> int:
+    """Encode a hop from ``square`` in ``direction`` as an action index."""
+    return square * 8 + direction * 2 + int(is_jump)
 
-        # Initialize state with empty repetitions and no progress moves
-        return {
-            'board': board,
-            'state_repetitions': defaultdict(int),
-            'no_progress_moves': 0,
-            'jump_again': None,
-            'board_timesteps': [board.copy()]
-        }
 
-    def get_valid_moves(self, state, player, enforce_piece=None):
-        board = state['board']
-        valid_moves = np.zeros(self.action_size, dtype=int)
-        jump_moves_exist = False
-        potential_jumps = []
+def iter_squares(bits: int) -> Iterator[int]:
+    """Yield the index of every set bit, lowest first."""
+    while bits:
+        lsb = bits & -bits
+        yield lsb.bit_length() - 1
+        bits ^= lsb
 
-        # Check all playable positions for the current player
-        for (r, c) in self.playable_positions:
-            piece = board[r, c]
-            # Check if the piece belongs to the current player
-            if piece == 0 or (piece != player and piece != 2 * player):
-                continue
 
-            # If a jump is required, check if this piece can jump
-            if state['jump_again'] and (r, c) != state['jump_again']:
-                continue
-            
-            # If enforcing a specific piece, skip others
-            if enforce_piece and (r, c) != enforce_piece:
-                continue
+# ------------------------------------------------------------------------------
+# Precomputed geometry: lookup tables of every hop that fits on the board,
+# built once when the module is imported. Move generation and play() then use
+# table lookups and bit tests instead of coordinate arithmetic.
 
-            is_king = abs(piece) == 2
-            # Check all possible moves from this position
-            for new_r, new_c, action_idx, dr, dc in self.move_map[(r, c)]:
-                # Jump move
-                if abs(new_r - r) == 2:
-                    mid_r, mid_c = (r + new_r) // 2, (c + new_c) // 2
-                    if board[mid_r, mid_c] in {-player, -2 * player} and board[new_r, new_c] == 0:
-                        if is_king or (player == 1 and dr == -2) or (player == -1 and dr == 2):
-                            valid_moves[action_idx] = 1
-                            jump_moves_exist = True
-                            potential_jumps.append(action_idx)
 
-                # Normal move
-                elif board[new_r, new_c] == 0:
-                    if not enforce_piece and (is_king or (player == 1 and dr == -1) or (player == -1 and dr == 1)):
-                        valid_moves[action_idx] = 1
+def _action_tables() -> tuple[list[int], ...]:
+    """Source, destination and captured square of every action.
 
-        # If jump moves exist, remove all normal moves
-        if jump_moves_exist:
-            valid_moves = np.zeros(self.action_size, dtype=int)
-            for action_idx in potential_jumps:
-                valid_moves[action_idx] = 1
+    Returns six lists indexed by action: ``from``, ``to`` and ``mid``
+    squares (``to`` is -1 when the hop would leave the board, ``mid`` is -1
+    for steps), then the same three as single-bit masks (0 when not
+    applicable), so ``play()`` can update bitboards without branching.
+    """
+    frm, to, mid = [-1] * ACTION_SIZE, [-1] * ACTION_SIZE, [-1] * ACTION_SIZE
+    frm_bit, to_bit = [0] * ACTION_SIZE, [0] * ACTION_SIZE
+    mid_bit = [0] * ACTION_SIZE
+    for s in range(NUM_SQUARES):
+        r, c = square_to_rc(s)
+        for d, (dr, dc) in enumerate(DIRECTIONS):
+            for jump in (0, 1):
+                a = make_action(s, d, jump)
+                dist = 2 if jump else 1
+                dest = rc_to_square(r + dist * dr, c + dist * dc)
+                frm[a], frm_bit[a] = s, 1 << s
+                if dest < 0:
+                    continue  # off the board: never legal
+                to[a], to_bit[a] = dest, 1 << dest
+                if jump:
+                    over = rc_to_square(r + dr, c + dc)
+                    mid[a], mid_bit[a] = over, 1 << over
+    return frm, to, mid, frm_bit, to_bit, mid_bit
 
-        return valid_moves
 
-    def get_next_state(self, state, action, player):
-        # Create a new state based on the current state
-        new_state = {
-            'board': state['board'].copy(),
-            'state_repetitions': state['state_repetitions'].copy(),
-            'no_progress_moves': state['no_progress_moves'],
-            'jump_again': state['jump_again'],
-            'board_timesteps': state['board_timesteps'].copy()
-        }
-        
-        # Check if the action is valid
-        for (r, c), moves in self.move_map.items():
-            for new_r, new_c, action_idx, _, _ in moves:
-                if action == action_idx:
-                    new_state['board'][new_r, new_c] = new_state['board'][r, c]
-                    new_state['board'][r, c] = 0
-                    
-                    # Handle capture
-                    capture_made = False
-                    if abs(new_r - r) == 2:
-                        mid_r, mid_c = (r + new_r) // 2, (c + new_c) // 2
-                        new_state['board'][mid_r, mid_c] = 0
-                        capture_made = True
-                        
-                        # Check if the piece can jump again
-                        if self.get_valid_moves(new_state, player, enforce_piece=(new_r, new_c)).any():
-                            new_state['jump_again'] = (new_r, new_c)
-                        else:
-                            new_state['jump_again'] = None
-                    else:
-                        new_state['jump_again'] = None
-                    
-                    # Handle promotion
-                    promotion_made = False
-                    if ((player == 1 and new_r == 0) or (player == -1 and new_r == self.row_count - 1)) and abs(new_state['board'][new_r, new_c]) == 1:
-                        new_state['board'][new_r, new_c] *= 2
-                        promotion_made = True
-                    
-                    # Reset move counter if capture or promotion
-                    if capture_made or promotion_made:
-                        new_state['no_progress_moves'] = 0
-                    else:
-                        new_state['no_progress_moves'] += 1
-                    
-                    # Update state repetitions
-                    board_hash = new_state['board'].tobytes()
-                    new_state['state_repetitions'][board_hash] += 1
-                    
-                    # Update board timesteps
-                    if new_state['jump_again'] is None:
-                        new_state['board_timesteps'].append(new_state['board'].copy())
-                        if len(new_state['board_timesteps']) > self.history_timesteps:
-                            new_state['board_timesteps'] = new_state['board_timesteps'][-self.history_timesteps:]
-                    
-                    return new_state
-                    
-        return new_state
+A_FROM, A_TO, A_MID, A_FROM_BIT, A_TO_BIT, A_MID_BIT = _action_tables()
 
-    def check_win(self, state, player):
-        opponent = self.get_opponent(player)
+# The 170 actions that stay on the board
+ON_BOARD_ACTIONS = [a for a in range(ACTION_SIZE) if A_TO[a] >= 0]
 
-        # Check if opponent has any pieces left
-        opponent_pieces = np.where((state['board'] == opponent) | (state['board'] == 2 * opponent))
-        if len(opponent_pieces[0]) == 0:
-            return True
+StepEntry = tuple[int, int]  # (destination bit, action)
+JumpEntry = tuple[int, int, int]  # (captured bit, destination bit, action)
 
-        # Check if opponent has any valid moves left
-        state_copy = state.copy()
-        state_copy['jump_again'] = None
-        valid_moves_opponent = self.get_valid_moves(state_copy, opponent)
-        if not valid_moves_opponent.any():
-            return True
-        return False
-    
-    def check_draw(self, state):
-        # Check for repetition of states
-        if any(count >= self.repetition_limit for count in state['state_repetitions'].values()):
-            return True
 
-        # Check for no progress moves
-        if state['no_progress_moves'] >= self.draw_move_limit:
-            return True
-        return False
-    
-    def get_value_and_terminated(self, state, player):
-        # Check for terminal conditions
-        if self.check_win(state, player):
-            return 1, True
-        if self.check_win(state, self.get_opponent(player)):
-            return -1, True
-        if self.check_draw(state):
-            return 0, True
-        return 0, False
-    
-    def get_opponent(self, player):
-        return -player
-    
-    def get_opponent_value(self, value):
-        return -value
+def _step_table(dirs: tuple[int, ...]) -> tuple[tuple[StepEntry, ...], ...]:
+    """For each square, the steps in ``dirs`` that stay on the board."""
+    table = []
+    for s in range(NUM_SQUARES):
+        actions = [make_action(s, d, 0) for d in dirs]
+        table.append(tuple((A_TO_BIT[a], a) for a in actions if A_TO[a] >= 0))
+    return tuple(table)
 
-    def show_board(self, state, player=None):
-        # Display the board in a human-readable format
-        board = state['board']        
-        max_col_width = len(str(self.col_count - 1))
-        max_piece_width = max(len(str(np.max(board))), len(str(np.min(board))))
-        cell_width = max(max_col_width, max_piece_width) + 1
 
-        # Create a formatted string for the board
-        col_numbers = " " + " " * (cell_width + 2) + " ".join(f"{i:>{cell_width}}" for i in range(self.col_count))
-        border = " " * (cell_width + 1) + "-" * ((cell_width + 1) * self.col_count + 1)
-        print(col_numbers)
-        print(border)
-        
-        # Print each row
-        for i, row in enumerate(board):
-            row_str = f"{i:>{cell_width}} | " + " ".join(f"{val:>{cell_width}}" for val in row)
-            print(row_str)
-        
-        print()
-        
-        # If a specific player is provided, show valid moves for that player
-        if player:
-            print(f"Player {player}")
-            valid_moves = self.get_valid_moves(state, player)
-            self.show_valid_moves(valid_moves)
-    
-    def show_valid_moves(self, valid_moves):
-        print("Valid Moves")
-        print("------------")
+def _jump_table(dirs: tuple[int, ...]) -> tuple[tuple[JumpEntry, ...], ...]:
+    """For each square, the jumps in ``dirs`` that stay on the board."""
+    table = []
+    for s in range(NUM_SQUARES):
+        actions = [make_action(s, d, 1) for d in dirs]
+        table.append(
+            tuple(
+                (A_MID_BIT[a], A_TO_BIT[a], a) for a in actions if A_TO[a] >= 0
+            )
+        )
+    return tuple(table)
 
-        # Display valid moves
-        move_list = []
-        for (r, c), moves in self.move_map.items():
-            for new_r, new_c, action_idx, dr, dc in moves:
-                if valid_moves[action_idx] == 1:
-                    move_name = self.move_names[(dr, dc)]
-                    move_list.append(f"{len(move_list)}: ({r}, {c}) -> ({new_r}, {new_c}) ({move_name}) [idx={action_idx}]")
 
-        for move in move_list:
-            print(move)
+_ALL_DIRS = (NW, NE, SW, SE)
+# Indexed [BLACK man, WHITE man, KING_TABLE][square] -> candidate hops for that
+# piece
+STEPS = (
+    _step_table(FORWARD[BLACK]),
+    _step_table(FORWARD[WHITE]),
+    _step_table(_ALL_DIRS),
+)
+JUMPS = (
+    _jump_table(FORWARD[BLACK]),
+    _jump_table(FORWARD[WHITE]),
+    _jump_table(_ALL_DIRS),
+)
+
+# Far row where each color's men are crowned
+PROMOTION_ROW = (
+    sum(1 << s for s in range(28, 32)),
+    sum(1 << s for s in range(4)),
+)
+
+
+# ------------------------------------------------------------------------------
+
+
+class Position:
+    """An immutable game state.
+
+    Create the start with ``Position.initial()`` or load one with
+    ``Position.from_fen()``, then advance with ``play(action)`` using an action
+    from ``legal_actions()``.
+
+    Attributes:
+        black, white, kings: bitboards of the pieces.
+        turn: side to move, ``BLACK`` or ``WHITE``.
+        jump_sq: square of the piece that must continue a multi-jump, else -1.
+        no_progress: plies since the last capture or man move (draw rule).
+        reps: how many times this position has occurred, counting this one.
+        prev: previous position. Only kept while ``no_progress > 0``: a
+            capture or man move can't be undone, so earlier positions can
+            never repeat.
+        rules: draw rules this game uses.
+    """
+
+    __slots__ = (
+        'black', 'white', 'kings', 'turn', 'jump_sq', 'no_progress', 'reps',
+        'prev', 'rules', '_legal', '_result', '_result_known',
+    )  # fmt: skip
+
+    black: int
+    white: int
+    kings: int
+    turn: int
+    jump_sq: int
+    no_progress: int
+    reps: int
+    prev: Position | None
+    rules: Rules
+    _legal: list[int] | None
+    _result: int | None
+    _result_known: bool
+
+    def __init__(
+        self,
+        black: int,
+        white: int,
+        kings: int,
+        turn: int,
+        jump_sq: int = -1,
+        no_progress: int = 0,
+        prev: Position | None = None,
+        rules: Rules = DEFAULT_RULES,
+    ) -> None:
+        """Build from bitboards; prefer ``initial``/``from_fen``/``play``."""
+        self.black = black
+        self.white = white
+        self.kings = kings
+        self.turn = turn
+        self.jump_sq = jump_sq
+        self.no_progress = no_progress
+        self.prev = prev
+        self.rules = rules
+        self._legal = None
+        self._result = None
+        self._result_known = False
+        self.reps = self._count_repetitions()
+
+    @classmethod
+    def initial(cls, rules: Rules = DEFAULT_RULES) -> Position:
+        """The start: Black on 1-12, White on 21-32, Black to move."""
+        return cls((1 << 12) - 1, FULL ^ ((1 << 20) - 1), 0, BLACK, rules=rules)
+
+    # -- state -----------------------------------------------------------------
+
+    @property
+    def key(self) -> tuple[int, int, int, int, int]:
+        """Hashable identity of the position. Ignores the draw counters."""
+        return (self.black, self.white, self.kings, self.turn, self.jump_sq)
+
+    def _count_repetitions(self) -> int:
+        # Every position within the no-progress window was reached without
+        # captures, so sides alternate each ply and only positions an even
+        # number of plies back can match.
+        """How many times this position has occurred, counting this one."""
+        if self.no_progress < 4:
+            return 1
+        count = 1
+        p = self.prev.prev if self.prev is not None else None
+        back = 2
+        while p is not None and back <= self.no_progress:
+            if (
+                p.black == self.black
+                and p.white == self.white
+                and p.kings == self.kings
+            ):
+                count += 1
+            p = p.prev.prev if p.prev is not None else None
+            back += 2
+        return count
+
+    # -- moves -----------------------------------------------------------------
+
+    def legal_actions(self) -> list[int]:
+        """Legal hops for the side to move; empty when it has lost.
+
+        Computed once, then cached.
+        """
+        if self._legal is None:
+            self._legal = self._generate()
+        return self._legal
+
+    def _generate(self) -> list[int]:
+        """Compute the legal hops: all captures if any exist, else all steps."""
+        turn = self.turn
+        own, opp = (
+            (self.white, self.black) if turn else (self.black, self.white)
+        )
+        empty = FULL & ~(own | opp)
+        kings = self.kings
+        # Mid multi-jump, only the jumping piece may move
+        pieces = own if self.jump_sq < 0 else 1 << self.jump_sq
+
+        # Captures first: if any exist, they are the only legal moves
+        man_jumps, king_jumps = JUMPS[turn], JUMPS[KING_TABLE]
+        jumps: list[int] = []
+        b = pieces
+        while b:
+            lsb = b & -b  # one piece at a time
+            b ^= lsb
+            for mid, to, a in (king_jumps if kings & lsb else man_jumps)[
+                lsb.bit_length() - 1
+            ]:
+                if opp & mid and empty & to:
+                    jumps.append(a)
+        if jumps or self.jump_sq >= 0:
+            return jumps
+
+        man_steps, king_steps = STEPS[turn], STEPS[KING_TABLE]
+        steps: list[int] = []
+        b = pieces
+        while b:
+            lsb = b & -b
+            b ^= lsb
+            for to, a in (king_steps if kings & lsb else man_steps)[
+                lsb.bit_length() - 1
+            ]:
+                if empty & to:
+                    steps.append(a)
+        return steps
+
+    def play(self, action: int) -> Position:
+        """The position after ``action``.
+
+        ``action`` must come from ``legal_actions()``. It isn't re-checked here,
+        for speed.
+        """
+        frm, to, mid = A_FROM_BIT[action], A_TO_BIT[action], A_MID_BIT[action]
+        turn = self.turn
+        black, white, kings = self.black, self.white, self.kings
+        move = frm | to  # XOR with this moves a piece from `frm` to `to`
+        was_king = kings & frm
+        if turn:
+            white ^= move
+            black &= ~mid  # mid is 0 for steps, so this is a no-op
+        else:
+            black ^= move
+            white &= ~mid
+        if was_king:
+            kings ^= move
+        kings &= ~mid
+        crowned = not was_king and bool(to & PROMOTION_ROW[turn])
+        if crowned:
+            kings |= to
+
+        rules = self.rules
+        if mid:
+            # After a capture the same piece continues if it can capture again
+            # (unless it was just crowned).
+            if not crowned:
+                opp = black if turn else white
+                empty = FULL & ~(black | white)
+                table = JUMPS[KING_TABLE if was_king else turn]
+                for m, t, _ in table[A_TO[action]]:
+                    if opp & m and empty & t:
+                        return Position(
+                            black,
+                            white,
+                            kings,
+                            turn,
+                            A_TO[action],
+                            0,
+                            None,
+                            rules,
+                        )
+            return Position(black, white, kings, 1 - turn, -1, 0, None, rules)
+
+        # A man move is irreversible, so it resets the draw counter and the
+        # repetition history
+        no_progress = self.no_progress + 1 if was_king else 0
+        prev = self if no_progress else None
+        return Position(
+            black, white, kings, 1 - turn, -1, no_progress, prev, rules
+        )
+
+    def complete_moves(self) -> list[tuple[tuple[int, ...], Position]]:
+        """Every full turn from here as ``(actions, resulting position)``.
+
+        Multi-jumps are expanded to their full hop sequences.
+        """
+        out: list[tuple[tuple[int, ...], Position]] = []
+
+        def expand(pos: Position, path: tuple[int, ...]) -> None:
+            """Follow every hop from ``pos``, recursing through multi-jumps."""
+            for a in pos.legal_actions():
+                nxt = pos.play(a)
+                if nxt.jump_sq >= 0:
+                    expand(nxt, path + (a,))
+                else:
+                    out.append((path + (a,), nxt))
+
+        expand(self, ())
+        return out
+
+    # -- outcome ---------------------------------------------------------------
+
+    def result(self) -> int | None:
+        """Outcome for the side to move, or ``None`` while the game continues.
+
+        -1 means lost (no legal moves), 0 drawn. A game never ends with the side
+        to move winning.
+        """
+        if not self._result_known:
+            if not self.legal_actions():
+                self._result = -1
+            elif (
+                self.no_progress >= self.rules.draw_plies
+                or self.reps >= self.rules.repetition_limit
+            ):
+                self._result = 0
+            self._result_known = True
+        return self._result
+
+    @property
+    def is_terminal(self) -> bool:
+        """Whether the game is over (lost or drawn for the side to move)."""
+        return self.result() is not None
+
+    # -- text ------------------------------------------------------------------
+
+    def to_fen(self) -> str:
+        """Standard PDN FEN, e.g. ``B:W21,22,K30:B1,2``.
+
+        Raises ``ValueError`` mid multi-jump, which FEN can't express.
+        """
+        if self.jump_sq >= 0:
+            raise ValueError(
+                'FEN cannot express a position in the middle of a multi-jump'
+            )
+
+        def side(bits: int) -> str:
+            """One colour's squares, comma-separated, kings prefixed with K."""
+            return ','.join(
+                ('K' if self.kings >> s & 1 else '') + str(s + 1)
+                for s in iter_squares(bits)
+            )
+
+        to_move = 'W' if self.turn else 'B'
+        return f'{to_move}:W{side(self.white)}:B{side(self.black)}'
+
+    @classmethod
+    def from_fen(cls, fen: str, rules: Rules = DEFAULT_RULES) -> Position:
+        """Parse PDN FEN; ranges like ``1-12`` are allowed.
+
+        Raises ``ValueError`` for impossible positions.
+        """
+        text = (
+            fen.strip()
+            .strip('[]')
+            .replace('FEN', '')
+            .strip()
+            .strip('"')
+            .rstrip('.')
+        )
+        fields = [f.strip() for f in text.split(':') if f.strip()]
+        if not fields or fields[0].upper() not in ('B', 'W'):
+            raise ValueError(f'Bad FEN side to move: {fen!r}')
+        turn = WHITE if fields[0].upper() == 'W' else BLACK
+        bits = {BLACK: 0, WHITE: 0}
+        kings = 0
+        for field in fields[1:]:
+            color = {'B': BLACK, 'W': WHITE}.get(field[0].upper())
+            if color is None:
+                raise ValueError(f'Bad FEN field {field!r}')
+            for item in filter(None, (i.strip() for i in field[1:].split(','))):
+                king = item[0].upper() == 'K'
+                item = item[1:] if king else item
+                lo, _, hi = item.partition('-')
+                for n in range(int(lo), int(hi or lo) + 1):
+                    if not 1 <= n <= 32:
+                        raise ValueError(f'Square {n} out of range')
+                    b = 1 << (n - 1)
+                    if (bits[BLACK] | bits[WHITE]) & b:
+                        raise ValueError(f'Square {n} occupied twice')
+                    bits[color] |= b
+                    if king:
+                        kings |= b
+        for color in (BLACK, WHITE):
+            if bits[color] & ~kings & PROMOTION_ROW[color]:
+                raise ValueError(
+                    f'{COLOR_NAMES[color]} man on its crowning row'
+                )
+            if (bits[color]).bit_count() > 12:
+                raise ValueError(
+                    f'{COLOR_NAMES[color]} has more than 12 pieces'
+                )
+        return cls(bits[BLACK], bits[WHITE], kings, turn, rules=rules)
+
+    def move_text(self, actions: tuple[int, ...] | list[int]) -> str:
+        """PDN notation for a full turn, e.g. ``11-15`` or ``22x15x6``."""
+        if A_MID[actions[0]] < 0:
+            return f'{A_FROM[actions[0]] + 1}-{A_TO[actions[0]] + 1}'
+        return 'x'.join(
+            [str(A_FROM[actions[0]] + 1)] + [str(A_TO[a] + 1) for a in actions]
+        )
+
+    def to_grid(self) -> list[list[int]]:
+        """8x8 grid of ints: White 1 (king 2), Black -1 (king -2)."""
+        grid = [[0] * 8 for _ in range(8)]
+        for bits, sign in ((self.white, 1), (self.black, -1)):
+            for s in iter_squares(bits):
+                r, c = square_to_rc(s)
+                grid[r][c] = sign * (2 if self.kings >> s & 1 else 1)
+        return grid
+
+    def __str__(self) -> str:
+        """ASCII board (Black at the top) and whose turn it is."""
+        glyph = {0: '.', 1: 'w', 2: 'W', -1: 'b', -2: 'B'}
+        rows = [
+            ' '.join(
+                glyph[v] if (r + c) % 2 else ' ' for c, v in enumerate(row)
+            )
+            for r, row in enumerate(self.to_grid())
+        ]
+        to_move = COLOR_NAMES[self.turn]
+        if self.jump_sq >= 0:
+            to_move += f' (continuing jump from {self.jump_sq + 1})'
+        return '\n'.join(rows) + f'\n{to_move} to move'
+
+    def __repr__(self) -> str:
+        """Short form for debugging: the FEN when there is one."""
+        try:
+            return f'Position({self.to_fen()!r})'
+        except ValueError:
+            return f'Position(key={self.key})'
+
+
+def perft(pos: Position, depth: int) -> int:
+    """Count full-turn move sequences of length ``depth``.
+
+    A multi-jump counts as one move.
+
+    Checked against published counts to validate move generation.
+    """
+    if depth == 0:
+        return 1
+    moves = pos.complete_moves()
+    if depth == 1:
+        return len(moves)
+    return sum(perft(nxt, depth - 1) for _, nxt in moves)

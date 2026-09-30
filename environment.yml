@@ -1,0 +1,17 @@
+name: alpha_checkers2
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  - pip
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu130
+      - torch==2.9.1
+      - numpy>=2.3
+      - tqdm
+      - psutil
+      - fastapi
+      - uvicorn
+      - pytest
+      - ruff
+      - pyright

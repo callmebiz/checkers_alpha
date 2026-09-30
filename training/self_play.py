@@ -1,305 +1,328 @@
-# training/self_play.py
+"""Self-play: the network plays itself to generate training data.
+
+Many games at once
+------------------
+A network call on the GPU costs about the same for 1 position as for 256, so
+``SelfPlay`` keeps up to ``concurrent_games`` games in progress, each with its
+own search tree. Every round, each game contributes one leaf, and all leaves
+go to the network in a single batch.
+
+Games don't wait for each other: a game whose search is done plays its move
+and starts the next search straight away, in the same round. Full and fast
+searches (below) take different numbers of rounds, and in lockstep the fast
+games would sit idle while the full ones finished, shrinking the batches.
+
+The games are split into two groups that take turns: while the GPU works on
+one group's batch (``core.inference.submit`` returns without waiting), the
+CPU backs up the other group's results and walks its trees to the next
+leaves. Neither the CPU nor the GPU sits idle waiting for the other.
+
+The pool never drains: when a game ends, a new one takes its slot at once.
+``play(n)`` returns after ``n`` games have finished, and games still in
+progress carry over to the next call. The network has usually been trained
+in between, so carried-over games start a fresh search tree.
+
+Each move
+---------
+1. **Forced moves** (one legal move, common with compulsory captures) are
+   played straight away. There's nothing to learn from them.
+2. **Full or fast search**: with probability ``full_search_prob`` the move
+   gets a full search (``sims``, root noise on) and is recorded as a training
+   sample. Otherwise a fast search (``fast_sims``, no noise) just picks the
+   move. This is KataGo's playout cap randomisation: more games per GPU-hour,
+   so more game outcomes to learn values from.
+3. **Choosing the move**: for the first ``temperature_plies`` plies the move
+   is sampled from the visit counts (for opening variety), afterwards the
+   most-visited move is played.
+4. The chosen child becomes the new root (tree reuse), and its visits count
+   toward the next search's budget.
+
+When the game ends, every recorded position gets its value target: win, draw
+or loss for the side that was to move there.
+"""
+
+from __future__ import annotations
+
+import time
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 import numpy as np
-import time
-import os
-import tempfile
-import torch
-import multiprocessing as mp
-from tqdm import tqdm
+import numpy.typing as npt
+
+from core.encoding import canonical_actions, features, legal_mask
+from core.game import ACTION_SIZE, COLOR_NAMES, Position, Rules
+from core.inference import Evaluator, Pending, submit
+from core.mcts import Leaf, SearchConfig, SearchTree, Selection
+from training.config import SelfPlayConfig
+from training.replay_buffer import DRAW, LOSS, WIN, Samples
 
 
-class SelfPlayManager:
-    def __init__(self, game, mcts, state_encoder, logger=None):
-        self.game = game
-        self.mcts = mcts
-        self.state_encoder = state_encoder
-        self.logger = logger
-    
-    def get_temperature_schedule(self, iteration, move_count, args):
-        """Get temperature for current training iteration and move"""
-        progress = iteration / args['num_iterations']
-        
-        base_temp = args.get('initial_temperature', 1.2)
-        final_temp = args.get('final_temperature', 0.8)
-        training_temp = base_temp - (base_temp - final_temp) * progress
-        
-        if move_count < 10:
-            move_temp_multiplier = 1.2
-        elif move_count < 30:
-            move_temp_multiplier = 1.0
-        else:
-            move_temp_multiplier = 0.8
-        
-        final_temperature = training_temp * move_temp_multiplier
-        return max(0.1, min(2.0, final_temperature))
-    
-    def play_game(self, starting_player, game_idx=None, iteration=0, args=None, initial_state=None):
-        """Play a single self-play game and return training data"""
-        memory = []
-        if initial_state:
-            state = initial_state.copy()
-        else:
-            state = self.game.get_initial_state()
+@dataclass
+class GameRecord:
+    """A finished self-play game: its training samples and a move log."""
 
-        current_player = starting_player
-        move_count = 0
-        mcts_time = 0
-        inference_time = 0.0
-        # Counters for game events
-        captures = 0
-        promotions = 0
-        multi_jumps = 0
-        
-        game_start_time = time.time()
-        
-        while True:
-            # Check for terminal state
-            _, is_terminal = self.game.get_value_and_terminated(state, current_player)
-            if is_terminal:
-                break
-                
-            # Get temperature for this move
-            temperature = self.get_temperature_schedule(iteration, move_count, args)
-            
-            # MCTS search with temperature control
-            mcts_start = time.time()
-            action_probs = self.mcts.search(
-                state, 
-                current_player, 
-                temperature=temperature,
-                add_noise=(move_count < 30)
-            )
-            mcts_time += time.time() - mcts_start
-            inference_time += self.mcts.get_last_search_inference_time()
-            
-            # Store the state from the perspective of the current player
-            memory.append([state.copy(), action_probs.copy(), current_player])
-            
-            # Select action from MCTS probabilities
-            if np.sum(action_probs) == 0:
-                if self.logger:
-                    self.logger.warning(f"No valid moves for player {current_player} in game {game_idx}")
-                break
-            
-            # Sample action from MCTS probabilities
-            action = np.random.choice(self.game.action_size, p=action_probs)
-            
-            # Apply the move
-            prev_board = state['board'].copy()
-            prev_jump_again = bool(state.get('jump_again'))
-            state = self.game.get_next_state(state, action, current_player)
-            # Detect captures (opponent piece removed)
-            # count pieces before/after for opponent
-            opp = self.game.get_opponent(current_player)
-            prev_opp_count = (prev_board == opp).sum() + (prev_board == 2*opp).sum()
-            new_board = state['board']
-            new_opp_count = (new_board == opp).sum() + (new_board == 2*opp).sum()
-            if new_opp_count < prev_opp_count:
-                captures += (prev_opp_count - new_opp_count)
-            # Detect promotion: piece at destination changed from man to king
-            # Rough heuristic: if destination square now has abs==2 and previously was not king
-            # We can't know destination easily here, but detect increases in king counts for current player
-            prev_king_count = (prev_board == 2*current_player).sum() + (prev_board == -2*current_player).sum()
-            new_king_count = (new_board == 2*current_player).sum() + (new_board == -2*current_player).sum()
-            if new_king_count > prev_king_count:
-                promotions += (new_king_count - prev_king_count)
-            # Multi-jump: if jump again flag is set after a capture
-            if state.get('jump_again'):
-                # if a jump occurred and there is a continuation
-                # treat as a multi-jump event
-                if new_opp_count < prev_opp_count:
-                    multi_jumps += 1
-            
-            # Switch players if not multi-jumping
-            if not state.get('jump_again'):
-                current_player = self.game.get_opponent(current_player)
-            
-            move_count += 1
-            
-            # # Safety check for extremely long games
-            # if move_count > 1000:
-            #     if self.logger:
-            #         self.logger.warning(f"Game {game_idx} exceeded 1000 moves, treating as draw")
-            #     break
-            
-        # Game has ended
-        final_state = state
-        game_time = time.time() - game_start_time
-        
-        # Create training examples with proper value assignment
-        return_memory = []
-        for hist_state, hist_action_probs, hist_player in memory:
-            # Get the final game outcome from this historical player's perspective
-            hist_outcome, _ = self.game.get_value_and_terminated(final_state, hist_player)
-            
-            # Encode state from the perspective of the player who made the move
-            encoded_state = self.state_encoder.encode_state(hist_state, hist_player)
-            
-            return_memory.append((
-                encoded_state,
-                hist_action_probs,
-                hist_outcome
-            ))
-            
-        # For statistics, get the outcome from player 1's perspective
-        final_outcome_p1, _ = self.game.get_value_and_terminated(final_state, 1)
-        
-        # Return game statistics
-        game_stats = {
-            'moves': move_count,
-            'outcome_p1': final_outcome_p1,
-            'game_time': game_time,
-            'mcts_time': mcts_time,
-            'avg_mcts_per_move': mcts_time / max(move_count, 1),
-            'inference_time': inference_time,
-            'avg_inference_per_move': inference_time / max(move_count, 1),
-            'training_examples': len(return_memory),
-            'captures': captures,
-            'promotions': promotions,
-            'multi_jumps': multi_jumps
+    start_fen: str
+    # one entry per hop, for replay in the UI; only kept for the few games
+    # chosen for saving (``logged``), to spare memory
+    moves: list[dict[str, Any]]
+    winner: int | None  # BLACK, WHITE, or None for a draw
+    plies: int
+    samples: Samples
+    logged: bool = False
+
+    def to_json(self) -> dict[str, Any]:
+        """The game as JSON for the UI (without the samples)."""
+        return {
+            'start': self.start_fen,
+            'winner': None if self.winner is None else COLOR_NAMES[self.winner],
+            'plies': self.plies,
+            'moves': self.moves,
         }
-        
-        return return_memory, final_outcome_p1, move_count, game_stats
 
-    def play_games_parallel(self, num_games, starting_player, iteration, args, initial_state=None, num_processes=None):
-        """Wrapper method to run multiple self-play games in parallel.
 
-        This instance method delegates to the module-level `play_games_parallel` helper
-        so existing callers on `SelfPlayManager` continue to work.
+@dataclass
+class SelfPlayStats:
+    games: int = 0
+    plies: int = 0
+    black_wins: int = 0
+    white_wins: int = 0
+    draws: int = 0
+    samples: int = 0
+    sims: int = 0  # simulations run (visits kept by tree reuse excluded)
+    evaluated: int = 0  # positions sent to the network
+    batches: int = 0  # network calls
+    seconds: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        """The statistics as a plain dict."""
+        return asdict(self)
+
+
+@dataclass
+class _Game:
+    """A game in progress."""
+
+    tree: SearchTree
+    start_fen: str
+    ply: int = 0
+    full: bool = False  # whether the current search is a full one
+    logged: bool = False  # keep a move log (only for games to be saved)
+    target: int = 0  # root visits at which the current search is done
+    positions: list[Position] = field(default_factory=list)  # recorded
+    targets: list[npt.NDArray[np.float32]] = field(default_factory=list)
+    moves: list[dict[str, Any]] = field(default_factory=list)
+
+
+class SelfPlay:
+    """Plays batches of self-play games with one evaluator."""
+
+    def __init__(
+        self,
+        evaluator: Evaluator,
+        config: SelfPlayConfig,
+        search: SearchConfig,
+        rules: Rules,
+        rng: np.random.Generator,
+    ) -> None:
+        """Games are searched with ``evaluator``; ``rng`` drives all chance."""
+        self.evaluator = evaluator
+        self.config = config
+        self.search = search
+        self.rules = rules
+        self.rng = rng
+        self.games: list[_Game] = []  # in progress, kept between calls
+        self._to_log = 0  # new games still to be logged in this call
+
+    def play(
+        self,
+        num_games: int,
+        on_game_end: Callable[[GameRecord], None] | None = None,
+    ) -> tuple[list[GameRecord], SelfPlayStats]:
+        """Play ``num_games`` games; return their records and statistics.
+
+        ``on_game_end`` is called as each game finishes (e.g. for a progress
+        bar). A round can finish several games, so slightly more than
+        ``num_games`` may be returned.
         """
-        # Import local reference to avoid circular import at module import time
-        return play_games_parallel(self, num_games, starting_player, iteration, args, initial_state=initial_state, num_processes=num_processes)
+        stats = SelfPlayStats()
+        start_time = time.perf_counter()
+        records: list[GameRecord] = []
+        self._to_log = self.config.saved_games
+        for game in self.games:  # the network changed since their last search
+            game.tree = SearchTree(
+                game.tree.root.pos, self.search, rng=self.rng
+            )
+            self._start_search(game)
 
+        # Two groups take turns, so the GPU evaluates one group's batch
+        # while the CPU backs up and selects leaves for the other.
+        size = self.config.concurrent_games
+        capacity = ((size + 1) // 2, size // 2)
+        groups = [self.games[0::2], self.games[1::2]]
+        in_flight: list[tuple[Pending, list[Leaf]] | None] = [None, None]
+        g = 0
+        while len(records) < num_games or any(in_flight):
+            batch = in_flight[g]
+            if batch is not None:
+                self._backup_batch(*batch, stats)
+                in_flight[g] = None
+            if len(records) < num_games and capacity[g] > 0:
+                while len(groups[g]) < capacity[g]:
+                    groups[g].append(self._new_game())
+                leaves: list[Leaf] = []
+                playing: list[_Game] = []
+                for game in groups[g]:
+                    leaf = self._next_leaf(game, stats)
+                    if leaf is None:
+                        record = self._finish(game)
+                        records.append(record)
+                        if on_game_end is not None:
+                            on_game_end(record)
+                    else:
+                        leaves.append(leaf)
+                        playing.append(game)
+                groups[g] = playing
+                if leaves:
+                    positions = [leaf.node.pos for leaf in leaves]
+                    in_flight[g] = (submit(self.evaluator, positions), leaves)
+            g = 1 - g
+        self.games = groups[0] + groups[1]
 
-# Worker globals populated by pool initializer
-_WORKER_STATE = {}
+        for record in records:
+            stats.games += 1
+            stats.plies += record.plies
+            stats.samples += len(record.samples)
+            if record.winner is None:
+                stats.draws += 1
+            elif record.winner == 0:
+                stats.black_wins += 1
+            else:
+                stats.white_wins += 1
+        stats.seconds = time.perf_counter() - start_time
+        return records, stats
 
+    def _backup_batch(
+        self, pending: Pending, leaves: list[Leaf], stats: SelfPlayStats
+    ) -> None:
+        """Wait for a batch's evaluation and back it up into its trees."""
+        priors, values, wdl = pending.result()
+        for i, leaf in enumerate(leaves):
+            leaf.tree.expand_and_backup(leaf, priors[i], values[i], wdl[i])
+        stats.evaluated += len(leaves)
+        stats.batches += 1
+        stats.sims += len(leaves)
 
-def _worker_init(model_state_path, model_config, game_config, training_args):
-    """Initializer for worker processes: construct game, encoder, model and MCTS once.
+    # -- one game -------------------------------------------------------------
 
-    Also limit BLAS/OpenMP and PyTorch threads to avoid oversubscription when running
-    multiple worker processes on CPU.
-    """
-    # (thread-limiting is configured externally by the user if desired)
-    # Import here so worker processes don't import heavy modules at parent import time
-    from core.game import Checkers
-    from core.state_encoder import StateEncoder
-    from core.model import ResNet
-    from core.mcts import MCTS
+    def _new_game(self) -> _Game:
+        """Start a game from the initial position and set up its search."""
+        start = Position.initial(self.rules)
+        tree = SearchTree(start, self.search, rng=self.rng)
+        game = _Game(tree, start.to_fen(), logged=self._to_log > 0)
+        self._to_log -= game.logged
+        self._start_search(game)
+        return game
 
-    # Recreate game and encoder
-    game = Checkers(**game_config)
-    encoder = StateEncoder(game)
+    def _over(self, game: _Game) -> bool:
+        """Whether ``game`` has ended or reached ``max_plies``."""
+        return (
+            game.tree.root.pos.is_terminal or game.ply >= self.config.max_plies
+        )
 
-    # Build model on CPU for worker inference
-    device = torch.device('cpu')
-    model = ResNet(
-        input_channels=model_config['input_channels'],
-        action_size=model_config['action_size'],
-        board_size=tuple(model_config['board_size']),
-        num_resBlocks=model_config['num_resBlocks'],
-        num_hidden=model_config['num_hidden'],
-        device=device,
-        use_checkpoint=model_config.get('use_checkpoint', False)
-    )
+    def _next_leaf(self, game: _Game, stats: SelfPlayStats) -> Leaf | None:
+        """Run ``game`` forward until its search needs an evaluation.
 
-    # Load state dict saved by parent (map to CPU)
-    try:
-        sd = torch.load(model_state_path, map_location='cpu')
-        model.load_state_dict(sd)
-    except Exception:
-        # If loading fails, continue with randomly initialized model
-        pass
-    model.eval()
+        Plays any moves whose search is complete along the way. Returns the
+        leaf to evaluate, or None once the game is over.
+        """
+        while not self._over(game):
+            tree = game.tree
+            if tree.root.visits >= game.target:
+                self._move(game)
+                self._start_search(game)
+                continue
+            selected = tree.select_leaf()
+            if isinstance(selected, Leaf):
+                return selected
+            if selected is Selection.TERMINAL:
+                stats.sims += 1
+            # (a collision can't happen with one leaf in flight per tree)
+        return None
 
-    # MCTS uses the shared training args passed in
-    mcts = MCTS(game, training_args, model, encoder)
+    def _start_search(self, game: _Game) -> None:
+        """Play forced moves, then set up a full or fast search."""
+        cfg = self.config
+        while not self._over(game):
+            legal = game.tree.root.pos.legal_actions()
+            if len(legal) != 1:
+                break
+            if game.logged:
+                game.moves.append({'action': legal[0], 'kind': 'forced'})
+            game.tree.advance(legal[0])
+            game.ply += 1
+        game.full = bool(self.rng.random() < cfg.full_search_prob)
+        game.tree.set_noise(game.full)
+        sims = cfg.sims if game.full else cfg.fast_sims
+        game.target = sims + 1  # + the root's own evaluation
 
-    # Store into global worker state
-    _WORKER_STATE['game'] = game
-    _WORKER_STATE['encoder'] = encoder
-    _WORKER_STATE['model'] = model
-    _WORKER_STATE['mcts'] = mcts
-    # (no worker debug logging)
+    def _move(self, game: _Game) -> None:
+        """Record the finished search (if full), then pick and play a move."""
+        tree, cfg = game.tree, self.config
+        root = tree.root
+        if game.full:
+            target = np.zeros(ACTION_SIZE, np.float32)
+            target[canonical_actions(root.pos)] = tree.policy(1.0)
+            game.positions.append(root.pos)
+            game.targets.append(target)
+        if game.ply < cfg.temperature_plies:
+            action = tree.sample_action(cfg.temperature)
+        else:
+            action = tree.best_action()
+        if game.logged:
+            game.moves.append(self._move_log(game, action))
+        tree.advance(action)
+        game.ply += 1
 
+    def _move_log(self, game: _Game, action: int) -> dict[str, Any]:
+        """Log entry for a searched move, with the root's statistics."""
+        root = game.tree.root
+        return {
+            'action': action,
+            'kind': 'full' if game.full else 'fast',
+            'value': round(root.q(), 3),
+            # [action, visits, prior] for every legal move
+            'stats': [
+                [a, int(n), round(float(p), 3)]
+                for a, n, p in zip(
+                    root.actions, root.N, root.P_raw, strict=True
+                )
+            ],
+        }
 
-def _worker_play_one(task):
-    """Play a single game in a worker using the pre-initialized worker state.
-
-    Task is a tuple: (task_idx, starting_player, iteration, args, initial_state)
-    Returns the tuple (game_memory, final_outcome_p1, move_count, game_stats)
-    """
-    from training.self_play import SelfPlayManager  # local import to avoid circular issues
-
-    _, starting_player, iteration, args, initial_state = task
-
-    game = _WORKER_STATE['game']
-    mcts = _WORKER_STATE['mcts']
-    encoder = _WORKER_STATE['encoder']
-
-    spm = SelfPlayManager(game, mcts, encoder, logger=None)
-    return spm.play_game(starting_player, iteration=iteration, args=args, initial_state=initial_state)
-
-
-def play_games_parallel(self, num_games, starting_player, iteration, args, initial_state=None, num_processes=None):
-    """Play multiple self-play games in parallel using a process pool.
-
-    Returns a list of per-game results in the same format as `play_game`.
-    """
-    # Determine worker count
-    workers = num_processes or max(1, (os.cpu_count() or 1) - 1)
-
-    # Prepare model snapshot for workers (save to temp file)
-    model_state_path = None
-    try:
-        # Prefer using the model contained in the MCTS instance
-        model = self.mcts.model
-        fd, model_state_path = tempfile.mkstemp(suffix='.pt')
-        os.close(fd)
-        torch.save(model.state_dict(), model_state_path)
-    except Exception:
-        model_state_path = None
-
-    # Build serializable model_config and game_config
-    model_config = {
-        'input_channels': self.state_encoder.get_num_channels(),
-        'action_size': self.game.action_size,
-        'board_size': (self.game.row_count, self.game.col_count),
-        'num_resBlocks': getattr(self.mcts.model, 'num_resBlocks', 3),
-        'num_hidden': getattr(self.mcts.model, 'num_hidden', 64),
-        'use_checkpoint': getattr(self.mcts.model, 'use_checkpoint', False)
-    }
-
-    game_config = {
-        'row_count': self.game.row_count,
-        'col_count': self.game.col_count,
-        'buffer_count': self.game.buffer_count,
-        'draw_move_limit': self.game.draw_move_limit,
-        'repetition_limit': self.game.repetition_limit,
-        'history_timesteps': self.game.history_timesteps
-    }
-
-    # Create tasks: each task represents a single game to keep progress reporting fine-grained
-    tasks = []
-    for gid in range(num_games):
-        tasks.append((gid, starting_player, iteration, args, initial_state))
-
-    results = []
-
-    # Use multiprocessing Pool with initializer to load model once per worker
-    try:
-        initargs = (model_state_path, model_config, game_config, args)
-        with mp.Pool(processes=workers, initializer=_worker_init, initargs=initargs) as pool:
-            for res in tqdm(pool.imap_unordered(_worker_play_one, tasks), total=len(tasks), desc='Parallel self-play'):
-                results.append(res)
-    finally:
-        # Clean up temporary model file
-        try:
-            if model_state_path and os.path.exists(model_state_path):
-                os.remove(model_state_path)
-        except Exception:
-            pass
-
-    return results
+    def _finish(self, game: _Game) -> GameRecord:
+        """Label the recorded positions with the game's outcome."""
+        final = game.tree.root.pos
+        winner = 1 - final.turn if final.result() == -1 else None
+        positions = game.positions
+        n = len(positions)
+        samples = Samples.empty(n)
+        if n:
+            samples.bits, samples.scalars = features(positions)
+            samples.policy = np.stack(game.targets).astype(np.float16)
+            samples.legal = np.packbits(legal_mask(positions), axis=1)
+            samples.wdl = np.array(
+                [
+                    DRAW
+                    if winner is None
+                    else WIN
+                    if p.turn == winner
+                    else LOSS
+                    for p in positions
+                ],
+                np.uint8,
+            )
+        return GameRecord(
+            game.start_fen, game.moves, winner, game.ply, samples, game.logged
+        )

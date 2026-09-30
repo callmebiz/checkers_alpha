@@ -1,119 +1,155 @@
-# Checkers Alpha Training Metrics
+# Checkers Alpha
 
-This file documents the runtime metrics and artifacts produced by training runs.
+An AlphaZero-style engine for American checkers (English draughts). A neural
+network learns by playing against itself, guided by Monte Carlo tree search,
+with no human games or hand-written strategy.
 
-Per-run layout
-- `models/<run>/models/`
-  - `config_snapshot.json`: compact snapshot of `args` and basic game config used for the run.
-- `models/<run>/logs/`
-  - `training_<timestamp>.log`: human-readable, timestamped log with one-line-per-iteration summaries.
-- `models/<run>/checkpoints/` and `models/<run>/models/`
-  - Saved PyTorch model and optimizer state files and checkpoints.
-- `mlruns/` and `mlflow.db` (optional)
-  - MLflow artifact folder and SQLite DB if MLflow is enabled.
+> **Status:** mid-refactor on the `refactor` branch. Rules, search, network,
+> players, training and evaluation are done and tested; the web UI comes
+> next. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
-Per-iteration log format
+## Setup
 
-Each iteration emits a single timestamped INFO line in the run log with only the fields required by the user. Example format (exact):
-
-`2025-11-27 16:46:24,627 - INFO - 1: Games 3 | P1:1 P-1:2 D:0 [Balanced] | Avg moves 77.3 | Avg MCTS/move 0.02 | Samples 232 | Policy Loss 3.824 Value Loss 0.372 Total Loss 4.196 | LR 0.0100 | Time 4.5s | Selfplay 3.93s Train 0.48s | ETA 0h 0m | Captures 57 Promotions 8 MultiJumps 6 | Max Win Streak 2 | GradNorm 2.071 MaxGrad 0.362`
-
-Fields included in the line (in order):
-- `iteration`: training iteration index (prefixed before the colon).
-- `Games`: number of completed self-play games that iteration.
-- `P1 / P-1 / D`: counts of wins for player 1, player -1, and draws.
-- `[Balanced]` / bias tag: a short balance indicator inserted after the outcome counts.
-- `Avg moves`: average moves per game (float).
-- `Avg MCTS/move`: wall-clock seconds spent in MCTS per move (float).
-- `Samples`: number of training samples collected for the iteration.
-- `Policy Loss` / `Value Loss` / `Total Loss`: training losses for the iteration.
-- `LR`: learning rate used.
-- `Time`: total wall-clock time for the iteration (seconds).
-- `Selfplay` and `Train`: breakdown of time spent in self-play and training (seconds).
-- `ETA`: estimated remaining time as `Xh Ym`.
-- `Captures` / `Promotions` / `MultiJumps`: aggregated event counts for the iteration.
-- `Max Win Streak`: longest winning streak observed during the iteration.
-- `GradNorm` / `MaxGrad`: gradient L2 norm and maximum absolute gradient value for the iteration.
-
-Notes
-- The per-iteration log line is intentionally compact and stable for easy grepping and parsing.
-- The repo contains a `training/utils.py` helper to reconstruct a JSON history from logs if needed. The canonical `training_history` JSON is produced once at the end of training.
-
-Quick Run Commands (Windows `cmd.exe`)
-
-- Play locally (human vs human):
-
-```cmd
-python play.py --mode pvp
+```sh
+conda env create -f environment.yml    # creates `alpha_checkers2`
+conda activate alpha_checkers2
 ```
 
-- Play human vs agent (load a model checkpoint, human controls bottom player by default):
+Needs an NVIDIA GPU with CUDA 13 drivers for training; play and tests also
+run on CPU.
 
-```cmd
-python play.py --mode pva --checkpoint models/my_run/models/model_10.pt --device cpu --mcts-searches 100
+## Play
+
+```sh
+python play.py                                   # you (Black) vs alpha-beta
+python play.py --black ab:4 --white human        # you play White
+python play.py --white mcts:rollout:400 --analysis
+python play.py --black ab:4 --white random --games 20   # quick match
 ```
 
-- Run an agent vs agent debug match (no checkpoint = uniform random agents):
+Enter moves in PDN notation: `11-15` for a step, `22x15` or `22x15x6` for
+captures. Type `?` for the square numbers and legal moves, `undo`, `fen` or
+`quit`.
 
-```cmd
-python play.py --mode ava --mcts-searches 50
+Player specs:
+
+| Spec                            | Player                               |
+| ------------------------------- | ------------------------------------ |
+| `human`                         | you, at the keyboard                 |
+| `random`                        | uniform random legal moves           |
+| `ab[:depth]`                    | alpha-beta search (default depth 6)  |
+| `policy:<checkpoint>`           | the network's top move, no search    |
+| `mcts:<checkpoint>[:sims]`      | tree search guided by the network    |
+| `mcts:uniform[:sims]`           | tree search, no network              |
+| `mcts:rollout[:sims]`           | tree search with random playouts     |
+
+## Train
+
+```sh
+python train.py --config configs/debug.json --run runs/debug   # ~1 min check
+python train.py --config configs/dev.json --run runs/dev       # ~20 s/iter
+python train.py --config configs/dev.json --run runs/dev2 --set train.lr=0.001
+python train.py --resume runs/dev              # Ctrl+C saves; this continues
+python train.py --resume runs/dev --iterations 100   # extend a finished run
 ```
 
-- Train (basic):
+Each iteration plays a batch of self-play games (256 at once, spread over
+`self_play.workers` processes sharing the GPU), adds the searched positions
+to a replay buffer, and trains on it.
 
-```cmd
-python train.py --config configs/dev.json --model-dir models/my_run
+Tuning workers: 2 is about twice as fast as 1 on an RTX 3070 with 16 cores.
+Beyond 2-3 it gets slower, because the GPU switches between the processes
+rather than running them together, and each worker's batches shrink. Keep
+`concurrent_games / workers` at 128 or more. Each worker needs ~2 GB of RAM.
+
+In a terminal you get two progress bars: the run (with the latest losses,
+draw rate, speed and Elo) and the current phase (self-play games, training
+steps, arena games). Only notable events are printed, such as arena
+results. Everything else goes to `train.log` in detail, in one standard
+layout: each entry has a timestamp and a tag (`RUN`, `ITER`, `PROBES`,
+`SAVE`, `ARENA`, `WARN`), then labelled rows (games, search, buffer, train,
+loss, memory) or an aligned table (probes, arena results). Use
+`--progress off` for plain one-line summaries (the default when output is
+redirected to a file).
+
+Everything lands in the run directory:
+
+```
+runs/<name>/
+  config.json        resolved config (edit via --set, not by hand)
+  metrics.jsonl      one row per iteration: losses, outcomes, speed
+  arena.jsonl        strength: scores vs alpha-beta, Elo over checkpoints
+  probes.json        positions to watch (edit any time)
+  probes.jsonl       what the network thinks of them, per iteration
+  train.log          detailed log: every iteration, arena, checkpoint
+  games/             sampled self-play games and all arena games
+  checkpoints/       iter_NNNN.pt, latest.pt, buffer.npz
 ```
 
-- Train with a fixed seed (applies to Python/NumPy/PyTorch/CUDA):
+### Measuring progress
 
-```cmd
-python train.py --config configs/dev.json --model-dir models/my_run --seed 42
+Every `arena.every` iterations the network plays matches (colours swapped
+over random openings) against alpha-beta and the previous evaluated
+checkpoint. `arena.jsonl` records the scores and an Elo chain; the log shows
+lines like `arena it 10: ab2 12-5-3 (+160), iter 4 9-8-3 (+106) | Elo 245`.
+
+### Probe positions
+
+Probes are positions the network is evaluated on as it trains: its prior for
+each move, its win/draw/loss estimate, and what a search concludes. The run
+starts with [configs/probes.json](configs/probes.json); add your own any
+time, and back-fill their history over earlier checkpoints:
+
+```sh
+python -m training.probes add runs/dev --name kings-corner \
+    --fen "W:WK32:BK1,K5" --backfill
+python -m training.probes list runs/dev
 ```
 
-- If you need reproducible GPU runs, set the following environment variables in your cmd session before starting Python (they must be set before importing CUDA/PyTorch):
+Configs: `debug` (tiny smoke test), `dev` (6x64 network, ~15-20 s per
+256-game iteration on an RTX 3070), `full` (10x128, long run). Any
+checkpoint can play:
 
-```cmd
-set CUBLAS_WORKSPACE_CONFIG=:4096:8
-set OMP_NUM_THREADS=1
-set MKL_NUM_THREADS=1
+```sh
+python play.py --white mcts:runs/dev/checkpoints/latest.pt:400 --analysis
 ```
 
-Then run the `python train.py ... --seed 42` command in the same session.
+## Develop
 
-- Start the MLflow UI (from repo root). This points the UI at the local SQLite store and `./mlruns` artifacts directory:
-
-```cmd
-mlflow ui --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns --host 0.0.0.0 --port 5000
+```sh
+pytest -m "not slow"          # fast tests (~5 s); drop -m for everything
+ruff format . && ruff check .
+pyright --pythonpath "$(python -c 'import sys; print(sys.executable)')"
 ```
 
-Open `http://localhost:5000` to view runs and artifacts.
+Code style: 80-column hard limit, single quotes, type hints, and a docstring
+on every module and function. Each module opens with an explanation of its
+concepts; read them in this order:
 
-**Using MLflow**
+1. [core/game.py](core/game.py): rules on bitboards, positions, moves, FEN
+2. [core/encoding.py](core/encoding.py): what the network sees, and why the
+   board is rotated for Black
+3. [core/model.py](core/model.py): the residual network and its two heads
+4. [core/inference.py](core/inference.py): batched position evaluation
+5. [core/mcts.py](core/mcts.py): the tree search, one simulation at a time
+6. [core/players.py](core/players.py): everything that can pick a move
+7. [training/self_play.py](training/self_play.py): generating games
+8. [training/replay_buffer.py](training/replay_buffer.py): what's stored
+9. [training/trainer.py](training/trainer.py): the loop and the loss
+   ([training/actors.py](training/actors.py): self-play in worker processes)
+10. [training/arena.py](training/arena.py): matches and Elo
+11. [training/probes.py](training/probes.py): watching chosen positions
+12. [training/config.py](training/config.py),
+    [training/run_store.py](training/run_store.py): settings and run files
 
-- **Install**: MLflow is optional. Install with `pip` if you want to enable logging:
+## Layout
 
-```cmd
-pip install mlflow
 ```
-
-- **Enable during training**: MLflow can be enabled either in the JSON config (`training_args.use_mlflow = true`) or via the training CLI flags. The CLI flags override config values:
-
-```cmd
-python train.py --config configs/dev.json --model-dir models/my_run --use-mlflow
+core/       rules, encoding, network, search, players
+training/   self-play, replay buffer, trainer, arena, probes, run directory
+configs/    debug / dev / full training configs, default probes
+tests/      rules (perft), encoding, search tactics, players
+docs/       roadmap
+play.py     terminal play and engine matches
+train.py    start or resume a training run
 ```
-
-- **Set experiment / tracking URI**: By default the project maps file-style URIs to an on-disk SQLite DB at `mlflow.db` and stores artifacts under `./mlruns`. You can override the experiment name and tracking URI via config or CLI:
-
-```cmd
-python train.py --config configs/dev.json --model-dir models/my_run --use-mlflow --mlflow-experiment my-experiment --mlflow-tracking-uri sqlite:///C:\path\to\mlflow.db
-```
-
-- **Defaults & behavior**: If no tracking URI is provided, the trainer will use `sqlite:///mlflow.db` and `./mlruns` as the artifact root. The `training/mlflow_logger.py` wrapper will silently no-op if `mlflow` isn't installed, so enabling `--use-mlflow` without installing the package will not crash the run (it will log that MLflow is disabled).
-
-- **What gets logged**: The trainer logs selected metrics each iteration, optional artifacts (checkpoints and final `training_history` JSON), and run-level params such as training hyperparameters. Use `mlflow_log_interval` in your config to control metric logging frequency.
-
-Notes on determinism
-
-- Setting `CUBLAS_WORKSPACE_CONFIG` and limiting BLAS/OpenMP threads reduces GPU nondeterminism, but some ops may still be non-deterministic or unsupported in deterministic mode. If `torch.use_deterministic_algorithms(True)` raises an error, it indicates an unsupported op; consider running on CPU for full reproducibility or replacing the offending op.
-

@@ -1,0 +1,24 @@
+{
+  "model": {
+    "blocks": 10,
+    "channels": 128,
+    "value_hidden": 256
+  },
+  "self_play": {
+    "workers": 2,
+    "games_per_iteration": 512,
+    "concurrent_games": 512,
+    "sims": 400,
+    "fast_sims": 100,
+    "full_search_prob": 0.25
+  },
+  "train": {
+    "iterations": 300,
+    "batch_size": 1024,
+    "lr": 0.002,
+    "warmup_steps": 500,
+    "buffer_size": 1000000,
+    "min_buffer": 20000,
+    "checkpoint_every": 10
+  }
+}

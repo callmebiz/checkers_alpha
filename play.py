@@ -1,556 +1,262 @@
 #!/usr/bin/env python3
-"""play.py - interactive runner for Checkers project
+"""Play checkers in the terminal, or run an engine-vs-engine match.
 
-Supports three modes:
-- pvp : human vs human (local, turn-based)
-- pva : human vs agent
-- ava : agent vs agent (useful for debugging)
+Player specs: human | random | ab[:depth] | policy:<checkpoint> |
+              mcts:<checkpoint|uniform|rollout>[:sims]
 
-Optional: load a model checkpoint for agent play. If no model is provided the agent will sample uniformly
-from valid moves.
+Examples:
+  # you (Black) vs alpha-beta depth 6
+  python play.py
+  python play.py --black ab:4 --white human
+  python play.py --white mcts:runs/dev/checkpoints/latest.pt:800 --analysis
+  # a 20-game match, colours alternate
+  python play.py --black mcts:rollout:200 --white ab:4 --games 20
 """
+
+from __future__ import annotations
+
 import argparse
 import time
-import numpy as np
 
-from core.game import Checkers
-from core.state_encoder import StateEncoder
-from core.mcts import MCTS
-from core.model import ResNet
-from training.checkpoints import load_model_from_checkpoint
+from core.game import BLACK, COLOR_NAMES, WHITE, Position, Rules
+from core.players import MCTSPlayer, Player, PolicyPlayer, make_player
 
+# Square numbers laid out like the board, shown by the `?` command
+SQUARE_GUIDE = '\n'.join(
+    ('   ' if r % 2 == 0 else '')
+    + '    '.join(f'{r * 4 + i + 1:>2}' for i in range(4))
+    for r in range(8)
+)
 
-def build_model_from_checkpoint(checkpoint, encoder, device):
-    cfg = checkpoint.get('model_config', {})
-    num_resBlocks = cfg.get('num_resBlocks', 3)
-    num_hidden = cfg.get('num_hidden', 64)
-    use_checkpoint = cfg.get('use_checkpoint', False)
-
-    model = ResNet(
-        input_channels=encoder.get_num_channels(),
-        action_size=encoder.game.action_size,
-        board_size=(encoder.game.row_count, encoder.game.col_count),
-        num_resBlocks=num_resBlocks,
-        num_hidden=num_hidden,
-        device=device,
-        use_checkpoint=use_checkpoint,
-    )
-
-    # Load weights if available
-    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
-
-    return model
+Seats = dict[int, Player | None]  # color -> player, None for a human
 
 
-def human_move(game, state, player):
-    # Assumes caller already displayed the board and valid moves
-    valid = game.get_valid_moves(state, player)
-    if not valid.any():
-        print("No valid moves available.")
-        return None
-
-    # Build sequence -> action_idx mapping in the same order as `show_valid_moves`
-    seq_to_action = []
-    for (r, c), moves in game.move_map.items():
-        for new_r, new_c, action_idx, dr, dc in moves:
-            if valid[action_idx] == 1:
-                seq_to_action.append(action_idx)
-
-    if len(seq_to_action) == 0:
-        print("No valid moves available.")
-        return None
-
-    while True:
-        try:
-            raw = input(f"Player {player} - enter move number (0..{len(seq_to_action)-1}) or 'q' to quit: ")
-            if raw.lower() in ('q', 'quit', 'exit'):
-                return 'quit'
-            seq = int(raw.strip())
-            if 0 <= seq < len(seq_to_action):
-                return seq_to_action[seq]
-            else:
-                print(f"Invalid move number. Enter a number between 0 and {len(seq_to_action)-1}.")
-        except ValueError:
-            print("Please enter a numeric move number.")
+def print_board(pos: Position, last_move: str | None = None) -> None:
+    """Print the board and, if given, the last move."""
+    print()
+    print(pos)
+    if last_move:
+        print(f'last move: {last_move}')
 
 
-def agent_move(game, mcts, state, player, temperature=0.0):
-    probs = mcts.search(state, player, temperature=temperature, add_noise=False)
-    if np.sum(probs) == 0:
-        return None
-    # deterministic selection
-    action = int(np.argmax(probs))
-    return action
+def outcome_text(pos: Position) -> str:
+    """'Draw.' or which colour won, for a finished position."""
+    if pos.result() == 0:
+        return 'Draw.'
+    return f'{COLOR_NAMES[1 - pos.turn].capitalize()} wins.'
 
 
-def uniform_agent_move(game, state, player):
-    valid = game.get_valid_moves(state, player)
-    idxs = np.where(valid == 1)[0]
-    if len(idxs) == 0:
-        return None
-    return int(np.random.choice(idxs))
+def describe_search(player: Player) -> str | None:
+    """One-line summary of an engine player's last decision."""
+    if (
+        isinstance(player, MCTSPlayer)
+        and player.tree is not None
+        and player.tree.root.expanded
+    ):
+        tree = player.tree
+        pos = tree.root.pos
+        top = sorted(tree.move_stats(), key=lambda s: -s['visits'])[:3]
+        moves = ', '.join(
+            f'{pos.move_text([s["action"]])} N={s["visits"]} '
+            f'Q={s["q"] or 0:+.2f} P={s["prior"]:.2f}'
+            for s in top
+        )
+        return f'  search: value {tree.root.q():+.2f} | {moves}'
+    if isinstance(player, PolicyPlayer) and player.last is not None:
+        _, value, wdl = player.last
+        win, draw, loss = wdl
+        return (
+            f'  net: value {value:+.2f}  W/D/L {win:.2f}/{draw:.2f}/{loss:.2f}'
+        )
+    return None
 
 
-def build_seq_to_action(game, valid):
-    seq_to_action = []
-    for (r, c), moves in game.move_map.items():
-        for new_r, new_c, action_idx, dr, dc in moves:
-            if valid[action_idx] == 1:
-                seq_to_action.append(action_idx)
-    return seq_to_action
+def human_turn(pos: Position) -> tuple[Position, str] | str:
+    """Prompt for a full move (e.g. ``11-15`` or ``22x15x6``).
 
-
-def display_state_info(game, state, player):
-    board_hash = state['board'].tobytes()
-    repeats = state.get('state_repetitions', {}).get(board_hash, 0)
-    print((f"Repetitions: {repeats}/{game.repetition_limit} | "
-           f"No-progress: {state.get('no_progress_moves',0)}/{game.draw_move_limit}"))
-    game.show_board(state, player)
-
-
-def run_game(mode, game, encoder, mcts=None, human_starts=1):
-    state = game.get_initial_state()
-    current = human_starts
-    move_count = 0
-
-    while True:
-        # Check terminal from current player's perspective
-        val, terminated = game.get_value_and_terminated(state, current)
-        if terminated:
-            print("Game ended")
-            display_state_info(game, state, 1)
-            outcome_p1, _ = game.get_value_and_terminated(state, 1)
-            if outcome_p1 == 1:
-                print("Player 1 (bottom) wins")
-            elif outcome_p1 == -1:
-                print("Player -1 (top) wins")
-            else:
-                print("Draw")
-            return
-
-        # Show state info and board before each move
-        display_state_info(game, state, current)
-
-        if mode == 'pvp':
-            action = human_move(game, state, current)
-            if action == 'quit':
-                print('Quitting...')
-                return
-
-        elif mode == 'pva':
-            if current == human_starts:
-                action = human_move(game, state, current)
-                if action == 'quit':
-                    print('Quitting...')
-                    return
-            else:
-                valid = game.get_valid_moves(state, current)
-                seq_to_action = build_seq_to_action(game, valid)
-                if mcts is not None:
-                    action = agent_move(game, mcts, state, current)
-                else:
-                    action = uniform_agent_move(game, state, current)
-
-                if action is None:
-                    print(f"No valid moves for player {current}, finishing.")
-                    return
-
-                # Map action to the sequence number (always present for valid moves)
-                seq_num = seq_to_action.index(action)
-                print(f"Agent (P{current}) chose move {seq_num}")
-
-        elif mode == 'ava':
-            raw = input("Press Enter to continue (or 'q' to quit) (AI vs AI)...")
-            if raw.lower() in ('q', 'quit', 'exit'):
-                print('Quitting...')
-                return
-            valid = game.get_valid_moves(state, current)
-            seq_to_action = build_seq_to_action(game, valid)
-            if mcts is not None:
-                action = agent_move(game, mcts, state, current)
-            else:
-                action = uniform_agent_move(game, state, current)
-
-            if action is None:
-                print(f"No valid moves for player {current}, finishing.")
-                return
-
-            seq_num = seq_to_action.index(action)
-            print(f"Agent (P{current}) chose move {seq_num}")
-
-        else:
-            raise ValueError("Unknown mode")
-
-        if action is None:
-            print(f"No valid moves for player {current}, finishing.")
-            return
-
-        state = game.get_next_state(state, action, current)
-
-        if not state.get('jump_again'):
-            current = game.get_opponent(current)
-
-        move_count += 1
-
-
-def main():
-    parser = argparse.ArgumentParser(description='Play Checkers (PVP/PVA/AVA)')
-    parser.add_argument('--mode', choices=['pvp', 'pva', 'ava'], default='pvp')
-    parser.add_argument('--checkpoint', type=str, default=None, help='Path to checkpoint .pt to load model')
-    parser.add_argument('--device', choices=['cpu', 'cuda'], default='cpu')
-    parser.add_argument('--mcts-searches', type=int, default=50)
-    parser.add_argument('--human-starts', type=int, choices=[1, -1], default=1, help='Which player the human controls (for pva mode).')
-    args = parser.parse_args()
-
-    game = Checkers()
-    encoder = StateEncoder(game)
-
-    device = args.device
-
-    model = None
-    mcts = None
-
-    if args.checkpoint:
-        checkpoint = load_model_from_checkpoint(args.checkpoint, device)
-        if checkpoint is None:
-            print(f"Failed to load checkpoint: {args.checkpoint}. Agents will use uniform random policy.")
-        else:
-            model = build_model_from_checkpoint(checkpoint, encoder, device)
-            cp_args = checkpoint.get('args', {}) if isinstance(checkpoint, dict) else {}
-            mcts_args = {
-                'num_searches': args.mcts_searches,
-                'C': cp_args.get('C', 1.0),
-                'dirichlet_epsilon': cp_args.get('dirichlet_epsilon', 0.25),
-                'dirichlet_alpha': cp_args.get('dirichlet_alpha', 0.03)
-            }
-            mcts = MCTS(game, mcts_args, model, encoder)
-            print(f"Loaded model from {args.checkpoint}; MCTS configured with {args.mcts_searches} searches.")
-
-    elif args.mode in ('pva', 'ava'):
-        # even without checkpoint, prepare a lightweight MCTS with uninitialized model replaced by uniform policy
-        # Here we won't create a model; MCTS requires a model in this implementation, so leave mcts None
-        print("No checkpoint provided: agents will act uniformly at random.")
-
-    print(f"Starting mode: {args.mode}")
-    run_game(args.mode, game, encoder, mcts=mcts, human_starts=args.human_starts)
-
-
-if __name__ == '__main__':
-    main()
-#!/usr/bin/env python3
-"""play.py - interactive runner for Checkers project
-
-Supports three modes:
-- pvp : human vs human (local, turn-based)
-- pva : human vs agent
-- ava : agent vs agent (useful for debugging)
-
-Optional: load a model checkpoint for agent play. If no model is provided the agent will sample uniformly
-from valid moves.
-"""
-import argparse
-import time
-import numpy as np
-
-from core.game import Checkers
-from core.state_encoder import StateEncoder
-from core.mcts import MCTS
-from core.model import ResNet
-from training.checkpoints import load_model_from_checkpoint
-
-
-def build_model_from_checkpoint(checkpoint, encoder, device):
-    cfg = checkpoint.get('model_config', {})
-    num_resBlocks = cfg.get('num_resBlocks', 3)
-    num_hidden = cfg.get('num_hidden', 64)
-    use_checkpoint = cfg.get('use_checkpoint', False)
-
-    model = ResNet(
-        input_channels=encoder.get_num_channels(),
-        action_size=encoder.game.action_size,
-        board_size=(encoder.game.row_count, encoder.game.col_count),
-        num_resBlocks=num_resBlocks,
-        num_hidden=num_hidden,
-        device=device,
-        use_checkpoint=use_checkpoint,
-    )
-
-    # Load weights if available
-    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
-
-    return model
-
-
-def human_move(game, state, player):
-    # Assumes caller already displayed the board and valid moves
-    valid = game.get_valid_moves(state, player)
-    if not valid.any():
-        print("No valid moves available.")
-        return None
-
-    # Build sequence -> action_idx mapping in the same order as `show_valid_moves`
-    seq_to_action = []
-    for (r, c), moves in game.move_map.items():
-        for new_r, new_c, action_idx, dr, dc in moves:
-            if valid[action_idx] == 1:
-                seq_to_action.append(action_idx)
-
-    if len(seq_to_action) == 0:
-        print("No valid moves available.")
-        return None
-
-    while True:
-        try:
-            raw = input(f"Player {player} - enter move number (0..{len(seq_to_action)-1}) or 'q' to quit: ")
-            if raw.lower() in ('q', 'quit', 'exit'):
-                return 'quit'
-            seq = int(raw.strip())
-            if 0 <= seq < len(seq_to_action):
-                return seq_to_action[seq]
-            else:
-                print(f"Invalid move number. Enter a number between 0 and {len(seq_to_action)-1}.")
-        except ValueError:
-            print("Please enter a numeric move number.")
-
-
-def agent_move(game, mcts, model, encoder, state, player, temperature=0.0, device='cpu'):
-    """Return (action_idx, probs) using MCTS if available, otherwise the model's policy.
-
-    Args:
-        game: Checkers game instance
-        mcts: optional MCTS instance
-        model: optional ResNet model
-        encoder: StateEncoder instance
-        state: current state dict
-        player: current player (1 or -1)
+    Returns ``(new position, move text)``, or the command ``'undo'`` /
+    ``'quit'``.
     """
-    probs = None
-    # Prefer MCTS when available
-    if mcts is not None:
-        probs = mcts.search(state, player, temperature=temperature, add_noise=False)
-    elif model is not None:
-        # Use the model directly to get policy logits -> probs
-        encoded = encoder.encode_state(state, player)
-        import torch
-        x = torch.from_numpy(encoded).unsqueeze(0).to(device)
-        model.eval()
-        with torch.no_grad():
-            logits, _ = model(x)
-        logits = logits.cpu().numpy().flatten()
-        # Mask invalid moves
-        valid = game.get_valid_moves(state, player)
-        logits = np.where(valid == 1, logits, -1e9)
-        # Softmax (stable)
-        exps = np.exp(logits - np.max(logits))
-        denom = np.sum(exps)
-        if denom == 0:
-            probs = np.zeros_like(exps)
-        else:
-            probs = exps / denom
-
-    if probs is None or np.sum(probs) == 0:
-        return None, None
-    action = int(np.argmax(probs))
-    return action, probs
-
-
-def uniform_agent_move(game, state, player):
-    valid = game.get_valid_moves(state, player)
-    idxs = np.where(valid == 1)[0]
-    if len(idxs) == 0:
-        return None
-    return int(np.random.choice(idxs))
-
-
-def build_seq_to_action(game, valid):
-    seq_to_action = []
-    for (r, c), moves in game.move_map.items():
-        for new_r, new_c, action_idx, dr, dc in moves:
-            if valid[action_idx] == 1:
-                seq_to_action.append(action_idx)
-    return seq_to_action
-
-
-def format_action_desc(game, action_idx):
-    """Return a human-friendly description for an action index."""
-    for (r, c), moves in game.move_map.items():
-        for new_r, new_c, a_idx, dr, dc in moves:
-            if a_idx == action_idx:
-                # move_names maps (dr,dc) -> human name if available
-                direction = getattr(game, 'move_names', {}).get((dr, dc), '')
-                return f"({r},{c}) -> ({new_r},{new_c}) ({direction}) [idx={a_idx}]"
-    return f"[idx={action_idx}]"
-
-
-def display_state_info(game, state, player):
-    board_hash = state['board'].tobytes()
-    repeats = state.get('state_repetitions', {}).get(board_hash, 0)
-    print((f"Repetitions: {repeats}/{game.repetition_limit} | "
-           f"No-progress: {state.get('no_progress_moves',0)}/{game.draw_move_limit}"))
-    game.show_board(state, player)
-
-
-def run_game(mode, game, encoder, model=None, mcts=None, human_starts=1, device='cpu'):
-    state = game.get_initial_state()
-    current = human_starts
-    move_count = 0
-
+    moves = {
+        pos.move_text(actions): nxt for actions, nxt in pos.complete_moves()
+    }
     while True:
-        # Check terminal from current player's perspective
-        val, terminated = game.get_value_and_terminated(state, current)
-        if terminated:
-            print("Game ended")
-            display_state_info(game, state, 1)
-            outcome_p1, _ = game.get_value_and_terminated(state, 1)
-            if outcome_p1 == 1:
-                print("Player 1 (bottom) wins")
-            elif outcome_p1 == -1:
-                print("Player -1 (top) wins")
-            else:
-                print("Draw")
-            return
-
-        # Show state info and board before each move
-        display_state_info(game, state, current)
-
-        if mode == 'pvp':
-            action = human_move(game, state, current)
-            if action == 'quit':
-                print('Quitting...')
-                return
-
-        elif mode == 'pva':
-            if current == human_starts:
-                action = human_move(game, state, current)
-                if action == 'quit':
-                    print('Quitting...')
-                    return
-            else:
-                valid = game.get_valid_moves(state, current)
-                seq_to_action = build_seq_to_action(game, valid)
-                # Get policy probs (from MCTS or model) if available
-                action = None
-                probs = None
-                if mcts is not None or model is not None:
-                    action, probs = agent_move(game, mcts, model, encoder, state, current, device=device)
-                else:
-                    # no policy available
-                    pass
-
-                # Print full list of valid moves with probabilities when available
-                for i, a_idx in enumerate(seq_to_action):
-                    desc = format_action_desc(game, a_idx)
-                    p = None
-                    if probs is not None:
-                        try:
-                            p = float(probs[a_idx])
-                        except Exception:
-                            p = None
-                    prob_str = f" [prob: {p:.3f}]" if p is not None else ""
-                    print(f"{i}: {desc}{prob_str}")
-
-                if action is None:
-                    # Fall back to uniform if no policy provided
-                    action = uniform_agent_move(game, state, current)
-
-                if action is None:
-                    print(f"No valid moves for player {current}, finishing.")
-                    return
-
-                # Map action to the sequence number (always present for valid moves)
-                seq_num = seq_to_action.index(action)
-                chosen_desc = format_action_desc(game, action)
-                chosen_prob = float(probs[action]) if (probs is not None and action is not None) else None
-                prob_str = f" [prob: {chosen_prob:.3f}]" if chosen_prob is not None else ""
-                print(f"Agent (P{current}) chose move {seq_num}: {chosen_desc}{prob_str}")
-
-        elif mode == 'ava':
-            raw = input("Press Enter to continue (or 'q' to quit) (AI vs AI)...")
-            if raw.lower() in ('q', 'quit', 'exit'):
-                print('Quitting...')
-                return
-            valid = game.get_valid_moves(state, current)
-            seq_to_action = build_seq_to_action(game, valid)
-            probs = None
-            action = None
-            if mcts is not None or model is not None:
-                action, probs = agent_move(game, mcts, model, encoder, state, current, device=device)
-
-            # Print full list of valid moves with probabilities when available
-            for i, a_idx in enumerate(seq_to_action):
-                desc = format_action_desc(game, a_idx)
-                p = None
-                if probs is not None:
-                    try:
-                        p = float(probs[a_idx])
-                    except Exception:
-                        p = None
-                prob_str = f" [prob: {p:.3f}]" if p is not None else ""
-                print(f"{i}: {desc}{prob_str}")
-
-            if action is None:
-                action = uniform_agent_move(game, state, current)
-
-            if action is None:
-                print(f"No valid moves for player {current}, finishing.")
-                return
-
-            seq_num = seq_to_action.index(action)
-            desc = format_action_desc(game, action)
-            chosen_prob = float(probs[action]) if (probs is not None and action is not None) else None
-            prob_str = f" [prob: {chosen_prob:.3f}]" if chosen_prob is not None else ""
-            print(f"Agent (P{current}) chose move {seq_num}: {desc}{prob_str}")
-
+        text = (
+            input(f'{COLOR_NAMES[pos.turn]} move (? for help): ')
+            .strip()
+            .lower()
+        )
+        text = text.replace(' ', '')
+        if text in ('q', 'quit', 'exit'):
+            return 'quit'
+        if text == 'undo':
+            return 'undo'
+        if text in ('?', 'h', 'help'):
+            print('Squares:\n' + SQUARE_GUIDE)
+            print('Legal moves: ' + '  '.join(sorted(moves)))
+            print('Commands: undo, fen, quit')
+        elif text == 'fen':
+            print(pos.to_fen())
+        elif text in moves:
+            return moves[text], text
         else:
-            raise ValueError("Unknown mode")
-
-        if action is None:
-            print(f"No valid moves for player {current}, finishing.")
-            return
-
-        state = game.get_next_state(state, action, current)
-
-        if not state.get('jump_again'):
-            current = game.get_opponent(current)
-
-        move_count += 1
+            # Also accept the start and end of a multi-jump, e.g. "1x19" for
+            # "1x10x19"
+            matches = [
+                m
+                for m in moves
+                if m.split('x')[0] + 'x' + m.split('x')[-1] == text
+            ]
+            if len(matches) == 1:
+                return moves[matches[0]], matches[0]
+            print(f'Not a legal move. Legal: {"  ".join(sorted(moves))}')
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Play Checkers (PVP/PVA/AVA)')
-    parser.add_argument('--mode', choices=['pvp', 'pva', 'ava'], default='pvp')
-    parser.add_argument('--checkpoint', type=str, default=None, help='Path to checkpoint .pt to load model')
-    parser.add_argument('--device', choices=['cpu', 'cuda'], default='cpu')
-    parser.add_argument('--mcts-searches', type=int, default=50)
-    parser.add_argument('--human-starts', type=int, choices=[1, -1], default=1, help='Which player the human controls (for pva mode).')
+def engine_turn(player: Player, pos: Position) -> tuple[Position, str]:
+    """Let an engine play a full turn (several hops for a multi-jump)."""
+    start, actions = pos, []
+    while True:
+        actions.append(player.choose(pos))
+        pos = pos.play(actions[-1])
+        if pos.jump_sq < 0:
+            return pos, start.move_text(actions)
+
+
+def play_game(
+    seats: Seats, start: Position, show: bool = True, analysis: bool = False
+) -> Position | None:
+    """Play one game from ``start``.
+
+    Returns the final position, or None if a human quit.
+    """
+    for player in seats.values():
+        if player is not None:
+            player.reset()
+    pos = start
+    history = [start]  # position at the start of each turn, for undo
+    if show:
+        print_board(pos)
+    while not pos.is_terminal:
+        player = seats[pos.turn]
+        if player is None:
+            answer = human_turn(pos)
+            if answer == 'quit':
+                return None
+            if answer == 'undo':
+                pos = undo(history, seats)
+                print_board(pos)
+                continue
+            assert isinstance(answer, tuple)
+            pos, move = answer
+        else:
+            t0 = time.perf_counter()
+            pos, move = engine_turn(player, pos)
+            if show and analysis:
+                took = time.perf_counter() - t0
+                print(f'{player.name} played {move} in {took:.1f}s')
+                info = describe_search(player)
+                if info:
+                    print(info)
+        history.append(pos)
+        if show:
+            print_board(pos, move)
+    if show:
+        print('\n' + outcome_text(pos))
+    return pos
+
+
+def undo(history: list[Position], seats: Seats) -> Position:
+    """Step back to this human's previous turn.
+
+    Engine replies in between are skipped.
+    """
+    if len(history) < 2:
+        print('Nothing to undo.')
+        return history[-1]
+    history.pop()
+    while len(history) > 1 and seats[history[-1].turn] is not None:
+        history.pop()
+    return history[-1]
+
+
+def run_match(a: Player, b: Player, start: Position, games: int) -> None:
+    """Play a match between ``a`` and ``b`` and print the score.
+
+    Colours alternate each game.
+    """
+    score = {'A wins': 0, 'draws': 0, 'B wins': 0}
+    t0 = time.perf_counter()
+    for g in range(games):
+        a_color = BLACK if g % 2 == 0 else WHITE
+        end = play_game({a_color: a, 1 - a_color: b}, start, show=False)
+        assert end is not None
+        if end.result() == 0:
+            score['draws'] += 1
+        else:
+            winner = 1 - end.turn
+            score['A wins' if winner == a_color else 'B wins'] += 1
+        print(
+            f'game {g + 1}/{games}: {outcome_text(end)}  '
+            f'(A played {COLOR_NAMES[a_color]})  running: {score}'
+        )
+    points = score['A wins'] + 0.5 * score['draws']
+    print(
+        f'\nA={a.name} vs B={b.name}: {score}, A score {points / games:.1%} '
+        f'in {time.perf_counter() - t0:.0f}s'
+    )
+
+
+def main() -> None:
+    """Parse the arguments, then play one game or a match."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        '--black', default='human', help='player spec for Black (moves first)'
+    )
+    parser.add_argument('--white', default='ab:6', help='player spec for White')
+    parser.add_argument('--fen', default=None, help='start from this position')
+    parser.add_argument(
+        '--games', type=int, default=1, help='play N games, alternating colours'
+    )
+    parser.add_argument(
+        '--analysis', action='store_true', help='print engine thinking'
+    )
+    parser.add_argument(
+        '--device', default='cuda', help='device for network players'
+    )
+    parser.add_argument('--draw-plies', type=int, default=Rules.draw_plies)
+    parser.add_argument('--seed', type=int, default=None)
     args = parser.parse_args()
 
-    game = Checkers()
-    encoder = StateEncoder(game)
+    rules = Rules(draw_plies=args.draw_plies)
+    start = (
+        Position.from_fen(args.fen, rules)
+        if args.fen
+        else Position.initial(rules)
+    )
 
-    device = args.device
+    def build(spec: str) -> Player | None:
+        """The player for ``spec``, or None for a human."""
+        return (
+            None
+            if spec == 'human'
+            else make_player(spec, args.device, args.seed)
+        )
 
-    model = None
-    mcts = None
-
-    if args.checkpoint:
-        checkpoint = load_model_from_checkpoint(args.checkpoint, device)
-        if checkpoint is None:
-            print(f"Failed to load checkpoint: {args.checkpoint}. Agents will use uniform random policy.")
-        else:
-            model = build_model_from_checkpoint(checkpoint, encoder, device)
-            # Use the model directly for policy decisions (no MCTS)
-            print(f"Loaded model from {args.checkpoint}; agent will use the model policy (no MCTS).")
-
-    elif args.mode in ('pva', 'ava'):
-        # even without checkpoint, prepare a lightweight MCTS with uninitialized model replaced by uniform policy
-        # Here we won't create a model; MCTS requires a model in this implementation, so leave mcts None
-        print("No checkpoint provided: agents will act uniformly at random.")
-
-    print(f"Starting mode: {args.mode}")
-    run_game(args.mode, game, encoder, model=model, mcts=None, human_starts=args.human_starts, device=device)
+    black, white = build(args.black), build(args.white)
+    if args.games == 1:
+        human_playing = black is None or white is None
+        play_game(
+            {BLACK: black, WHITE: white},
+            start,
+            analysis=args.analysis or human_playing,
+        )
+    elif black is None or white is None:
+        parser.error('--games needs two engine players')
+    else:
+        run_match(black, white, start, args.games)
 
 
 if __name__ == '__main__':

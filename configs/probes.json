@@ -1,0 +1,41 @@
+[
+  {
+    "name": "start",
+    "fen": "B:W21-32:B1-12",
+    "note": "Opening preferences; the value should stay near a draw.",
+    "expected": null
+  },
+  {
+    "name": "win-in-one",
+    "fen": "B:W29:B21,22",
+    "note": "21-25 blocks White's last man; 22-26 wins a move later.",
+    "expected": [
+      "21-25",
+      "22-26"
+    ]
+  },
+  {
+    "name": "avoid-loss",
+    "fen": "B:W19:B10",
+    "note": "10-15 lets 19 capture Black's only man; 10-14 is safe.",
+    "expected": "10-14"
+  },
+  {
+    "name": "only-move",
+    "fen": "W:W17,19,20,21,25,26,27,29,30:B2,4,5,8,9,10,11,12,14",
+    "note": "Only 27-24 holds; any other move drops a man (alpha-beta, d8).",
+    "expected": "27-24"
+  },
+  {
+    "name": "two-kings-vs-one",
+    "fen": "B:WK19:BK1,K5",
+    "note": "Two kings beat one: the value should climb toward a win.",
+    "expected": null
+  },
+  {
+    "name": "king-vs-king",
+    "fen": "B:WK32:BK1",
+    "note": "A dead draw: the value should settle at zero.",
+    "expected": null
+  }
+]
