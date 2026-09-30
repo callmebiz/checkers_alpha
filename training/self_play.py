@@ -177,7 +177,12 @@ _WORKER_STATE = {}
 
 
 def _worker_init(model_state_path, model_config, game_config, training_args):
-    """Initializer for worker processes: construct game, encoder, model and MCTS once."""
+    """Initializer for worker processes: construct game, encoder, model and MCTS once.
+
+    Also limit BLAS/OpenMP and PyTorch threads to avoid oversubscription when running
+    multiple worker processes on CPU.
+    """
+    # (thread-limiting is configured externally by the user if desired)
     # Import here so worker processes don't import heavy modules at parent import time
     from core.game import Checkers
     from core.state_encoder import StateEncoder
@@ -217,6 +222,7 @@ def _worker_init(model_state_path, model_config, game_config, training_args):
     _WORKER_STATE['encoder'] = encoder
     _WORKER_STATE['model'] = model
     _WORKER_STATE['mcts'] = mcts
+    # (no worker debug logging)
 
 
 def _worker_play_one(task):
@@ -284,7 +290,8 @@ def play_games_parallel(self, num_games, starting_player, iteration, args, initi
 
     # Use multiprocessing Pool with initializer to load model once per worker
     try:
-        with mp.Pool(processes=workers, initializer=_worker_init, initargs=(model_state_path, model_config, game_config, args)) as pool:
+        initargs = (model_state_path, model_config, game_config, args)
+        with mp.Pool(processes=workers, initializer=_worker_init, initargs=initargs) as pool:
             for res in tqdm(pool.imap_unordered(_worker_play_one, tasks), total=len(tasks), desc='Parallel self-play'):
                 results.append(res)
     finally:

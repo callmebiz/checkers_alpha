@@ -46,15 +46,30 @@ class Trainer:
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_file = os.path.join(log_dir, f"training_{self.timestamp}.log")
         
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler()
-            ]
-        )
-        self.logger = logging.getLogger(__name__)
+        # Dedicated trainer logger: write to per-run file and console
+        self.logger = logging.getLogger('checkers_trainer')
+        self.logger.setLevel(logging.INFO)
+        # Remove existing handlers on this logger to avoid duplicate logs
+        for h in list(self.logger.handlers):
+            self.logger.removeHandler(h)
+
+        # File handler for per-run log
+        try:
+            fh = logging.FileHandler(log_file)
+            fh.setLevel(logging.INFO)
+            fh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+            self.logger.addHandler(fh)
+        except Exception:
+            # Fall back silently if file cannot be opened
+            pass
+
+        # Console handler at WARNING to avoid polluting tqdm output
+        sh = logging.StreamHandler(sys.stdout)
+        sh.setLevel(logging.WARNING)
+        sh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        self.logger.addHandler(sh)
+        # Prevent propagation to root logger
+        self.logger.propagate = False
         
         # Initialize components
         self.checkpoint_manager = CheckpointManager(model, optimizer, game, self.scaler, self.logger)
@@ -278,10 +293,8 @@ class Trainer:
         self.metrics.start_time = overall_start_time
 
         # Prepare per-run subfolders
-        models_dir = os.path.join(model_dir, 'models')
         checkpoints_dir = os.path.join(model_dir, 'checkpoints')
         logs_dir = os.path.join(model_dir, 'logs')
-        os.makedirs(models_dir, exist_ok=True)
         os.makedirs(checkpoints_dir, exist_ok=True)
         os.makedirs(logs_dir, exist_ok=True)
 
@@ -290,11 +303,9 @@ class Trainer:
             self._write_manifest(model_dir, config_path=config_path)
         except Exception:
             self.logger.debug('Failed to write initial manifest')
-        # Save a snapshot of config and args into the model_dir/models folder for easy inspection
+        # Save a snapshot of config and args into the checkpoints folder for easy inspection
         try:
             import json
-            models_dir = os.path.join(model_dir, 'models')
-            os.makedirs(models_dir, exist_ok=True)
             cfg = {
                 'args': self.args,
                 'game_config': {
@@ -309,7 +320,7 @@ class Trainer:
             # include replay buffer size hint if present in args
             if 'replay_buffer_size' in self.args:
                 cfg['replay_buffer_size'] = self.args.get('replay_buffer_size')
-            cfg_path = os.path.join(models_dir, 'config_snapshot.json')
+            cfg_path = os.path.join(checkpoints_dir, 'config_snapshot.json')
             with open(cfg_path, 'w') as cf:
                 json.dump(cfg, cf, indent=2)
         except Exception:
@@ -510,11 +521,9 @@ class Trainer:
                 current_lr = new_lr
                 self.logger.info(f"LR decay: {old_lr:.6f} -> {new_lr:.6f}")
             
-            # Save model and checkpoint into run subfolders
-            torch.save(self.model.state_dict(), os.path.join(models_dir, f"model_{i}.pt"))
-            torch.save(self.optimizer.state_dict(), os.path.join(models_dir, f"optimizer_{i}.pt"))
-            
-            if i % 5 == 0 or i == self.args['num_iterations'] - 1:
+            # Save checkpoint into run checkpoints folder at configured interval
+            checkpoint_interval = int(self.args.get('checkpoint_interval', 5))
+            if i % checkpoint_interval == 0 or i == self.args['num_iterations'] - 1:
                 self.checkpoint_manager.save_checkpoint(
                     i, checkpoints_dir, self.metrics.training_history, self.args, self.timestamp,
                     mlflow_run_id=self.mlflow_run_id
@@ -578,6 +587,20 @@ class Trainer:
                 'max_win_streak_pneg1': max_streak_pneg1,
                 'total_iterations': self.args['num_iterations']
             }
+
+            # Attach GPU stats for debugging (non-fatal)
+            gpu_stats = None
+            try:
+                if torch.cuda.is_available():
+                    gpu_stats = {
+                        'device': str(self.model.device),
+                        'memory_allocated': int(torch.cuda.memory_allocated()),
+                        'memory_reserved': int(torch.cuda.memory_reserved()) if hasattr(torch.cuda, 'memory_reserved') else 0
+                    }
+                    iteration_stats['gpu_stats'] = gpu_stats
+            except Exception:
+                gpu_stats = None
+
             
             # Update training history
             # Compute gradient stats after training step(s)
@@ -641,12 +664,7 @@ class Trainer:
                         'draw_rate': draw_rate,
                         'avg_game_length': avg_game_length,
                         'total_samples': len(memory),
-                        'learning_rate': current_lr,
-                        # Timing breakdowns: useful to track performance over iterations
-                        'selfplay_time': selfplay_time,
-                        'inference_time': total_inference_time,
-                        'training_time': training_time,
-                        'total_time': iteration_time
+                        'learning_rate': current_lr
                     }
                     try:
                         mlfl.log_metrics(metrics_to_log, step=i)
@@ -662,7 +680,7 @@ class Trainer:
         # Final training summary
         total_training_time = time.time() - overall_start_time
         self.logger.info(f"Training Complete! Total time: {total_training_time:.1f}s ({total_training_time/3600:.2f}h)")
-        self.logger.info(f"Models saved to: {model_dir}")
+        self.logger.info(f"Checkpoints saved to: {checkpoints_dir}")
         
         # Save final training history and checkpoint
         try:

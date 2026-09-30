@@ -5,6 +5,8 @@ import torch
 import time
 
 
+
+
 class Node:
     def __init__(self, game, args, state, player, parent=None, action_taken=None, prior=0, depth=0):
         self.game = game
@@ -81,6 +83,7 @@ class MCTS:
         self.args = args
         self.model = model
         self.state_encoder = state_encoder
+        # No cache by default; MCTS does direct model forward calls
     
     @torch.no_grad
     def search(self, state, player, temperature=1.0, add_noise=True, return_visit_counts=False):
@@ -93,12 +96,13 @@ class MCTS:
         
         # Get initial policy and value from neural network (measure inference time)
         model_time = 0.0
+        # Root evaluation via model
         start = time.time()
         policy, value = self.model(
             torch.tensor(self.state_encoder.encode_state(state, player), device=self.model.device).unsqueeze(0)
         )
         model_time += time.time() - start
-        policy = torch.softmax(policy, axis=1).squeeze(0).cpu().numpy()
+        policy = torch.softmax(policy, dim=1).squeeze(0).cpu().numpy()
         
         # Add Dirichlet noise if requested
         if add_noise:
@@ -128,20 +132,24 @@ class MCTS:
             _, is_terminal = self.game.get_value_and_terminated(node.state, node.player)
             
             if not is_terminal:
-                # Evaluation (measure inference time)
+                # Evaluation via model
                 start = time.time()
                 policy, value = self.model(
                     torch.tensor(self.state_encoder.encode_state(node.state, node.player), 
                                device=self.model.device).unsqueeze(0)
                 )
                 model_time += time.time() - start
-                policy = torch.softmax(policy, axis=1).squeeze(0).cpu().numpy()
+                policy = torch.softmax(policy, dim=1).squeeze(0).cpu().numpy()
+
                 valid_moves = self.game.get_valid_moves(node.state, node.player)
                 policy *= valid_moves
                 
                 if np.sum(policy) > 0:
                     policy /= np.sum(policy)
-                    value = value.item()
+                    if isinstance(value, torch.Tensor):
+                        value = value.item()
+                    else:
+                        value = float(value)
                     
                     if not node.is_fully_expanded():
                         node.expand(policy)
@@ -166,9 +174,7 @@ class MCTS:
                 visit_counts = visit_counts.astype(np.float64)
                 if temperature != 1.0:
                     visit_counts = np.power(visit_counts, 1.0 / temperature)
-                
-                if np.sum(visit_counts) > 0:
-                    action_probs = visit_counts / np.sum(visit_counts)
+                action_probs = visit_counts / np.sum(visit_counts)
         
         # Store inference time for external inspection
         self._last_search_inference_time = float(model_time)
@@ -180,3 +186,5 @@ class MCTS:
     def get_last_search_inference_time(self):
         """Return the wall-clock seconds spent in model forward calls during the last search."""
         return getattr(self, '_last_search_inference_time', 0.0)
+
+

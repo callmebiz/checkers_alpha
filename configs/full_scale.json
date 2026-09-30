@@ -20,6 +20,7 @@
     "num_iterations": 100,
     "num_self_play_iterations": 100,
     "num_epochs": 20,
+     "checkpoint_interval": 5,
     "batch_size": 64,
     "initial_temperature": 1.5,
     "final_temperature": 0.6,

@@ -16,14 +16,15 @@
   
   "training_args": {
     "C": 2,
-    "num_searches": 2,
-    "num_iterations": 3,
-    "num_self_play_iterations": 4,
+    "num_searches": 1,
+    "num_iterations": 20,
+    "num_self_play_iterations": 5,
     "num_epochs": 4,
     "batch_size": 16,
     "initial_temperature": 1.4,
     "final_temperature": 1.0,
     "use_temperature": true,
+    "checkpoint_interval": 5,
     "dirichlet_epsilon": 0.25,
     "dirichlet_alpha": 0.5,
     "lr_decay_steps": 2,

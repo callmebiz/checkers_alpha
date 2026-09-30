@@ -48,6 +48,8 @@ def main():
     validate_config(config)
     print_config_summary(config)
 
+    
+
     # Global seeding: apply early so all components use the same RNGs
     if args.seed is not None:
       import random as _rand
@@ -96,6 +98,55 @@ def main():
     # MCTS: training_args passed through for num_searches, C, etc.
     mcts = MCTS(game, training_args, model, encoder)
 
+    # If resuming from a checkpoint and no explicit model_dir was provided,
+    # try to detect the original run directory and resume in-place when
+    # the checkpoint's configs/args match the current config.
+    def _find_run_dir(path):
+        p = os.path.abspath(os.path.dirname(path))
+        for _ in range(6):
+            # heuristic: a run dir contains a 'logs' subdirectory (and usually 'models'/'checkpoints')
+            if os.path.isdir(os.path.join(p, 'logs')) or os.path.isdir(os.path.join(p, 'checkpoints')) or os.path.isdir(os.path.join(p, 'models')):
+                return p
+            parent = os.path.dirname(p)
+            if parent == p:
+                break
+            p = parent
+        return None
+
+    def _checkpoint_compatible(ckpt, game_cfg, model_cfg, training_args):
+        # Basic compatibility checks: compare model_config and game_config and a few training args
+        try:
+            c_model = ckpt.get('model_config', {})
+            c_game = ckpt.get('game_config', {})
+            c_args = ckpt.get('args', {})
+            # Compare model and game configs
+            for k in ('num_resBlocks', 'num_hidden', 'use_checkpoint'):
+                if k in model_cfg and c_model.get(k) != model_cfg.get(k):
+                    return False
+            for k in ('row_count', 'col_count', 'buffer_count', 'history_timesteps'):
+                if k in game_cfg and c_game.get(k) != game_cfg.get(k):
+                    return False
+            # Compare a few key training args that affect runtime layout
+            for k in ('num_iterations', 'num_self_play_iterations', 'num_searches', 'batch_size', 'num_epochs'):
+                if k in training_args and c_args.get(k) != training_args.get(k):
+                    return False
+        except Exception:
+            return False
+        return True
+
+    resume_inplace = False
+    if args.resume_from and not args.model_dir:
+        try:
+            ck = torch.load(args.resume_from, map_location='cpu')
+            run_dir = _find_run_dir(args.resume_from)
+            if run_dir and _checkpoint_compatible(ck, game_cfg, model_cfg, training_args):
+                model_dir = run_dir
+                resume_inplace = True
+                print(f"Resuming in-place into existing run directory: {model_dir}")
+        except Exception:
+            # If anything fails, fall back to creating a new run directory as usual
+            pass
+
     # Trainer
     # Apply CLI MLflow overrides if provided
     if args.use_mlflow:
@@ -113,8 +164,10 @@ def main():
       run_name = args.run_name or f"model_{timestamp}"
       model_dir = os.path.join(base_model_root, run_name)
     else:
-      run_name = args.run_name or f"model_{timestamp}"
-      model_dir = os.path.join('runs', run_name)
+      # If we already decided to resume in-place above, model_dir is set.
+      if not resume_inplace:
+        run_name = args.run_name or f"model_{timestamp}"
+        model_dir = os.path.join('runs', run_name)
 
     # Define per-run log directory and pass it to Trainer
     log_dir = os.path.join(model_dir, 'logs')
@@ -133,6 +186,8 @@ def main():
       num_processes=args.parallel_processes,
       config_path=args.config
     )
+
+    # No in-process predictor to clean up (predictor disabled/rolled back)
 
 
 if __name__ == '__main__':
