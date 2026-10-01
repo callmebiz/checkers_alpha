@@ -151,7 +151,10 @@ def backfill(
     for path in store.list_checkpoints():
         model, ckpt = load_model(path, device)
         results = evaluate_probes(
-            probes, NetEvaluator(model), config.probes.sims, config.rules
+            probes,
+            NetEvaluator(model, backend='graphs'),
+            config.probes.sims,
+            config.rules,
         )
         store.append_probe_results(
             {

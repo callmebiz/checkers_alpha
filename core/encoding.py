@@ -45,6 +45,8 @@ from collections.abc import Sequence
 
 import numpy as np
 import numpy.typing as npt
+import torch
+from torch import nn
 
 from core.game import ACTION_SIZE, BLACK, NUM_SQUARES, Position, square_to_rc
 
@@ -153,3 +155,40 @@ def planes(
 def encode(positions: Sequence[Position]) -> npt.NDArray[np.float32]:
     """Network input for ``positions``: ``planes(*features(positions))``."""
     return planes(*features(positions))
+
+
+class PlaneExpander(nn.Module):
+    """``planes`` on the GPU: compact features in, network input out.
+
+    Workers and the replay buffer pass features around (40 bytes per
+    position as int64 bitboards plus scalars) instead of planes (2 KB), and
+    the expansion runs on the GPU, inside the same CUDA graph as the network.
+    """
+
+    square_index: torch.Tensor
+    shifts: torch.Tensor
+
+    def __init__(self) -> None:
+        """Precompute where each square goes on the flattened 8x8 grid."""
+        super().__init__()
+        index = torch.as_tensor(SQUARE_ROW * 8 + SQUARE_COL)
+        self.register_buffer('square_index', index, persistent=False)
+        self.register_buffer(
+            'shifts', torch.arange(NUM_SQUARES), persistent=False
+        )
+
+    def forward(
+        self, bits: torch.Tensor, scalars: torch.Tensor
+    ) -> torch.Tensor:
+        """``bits (N, 5)`` int64 and ``scalars (N, 2)`` float to planes."""
+        n = bits.shape[0]
+        # (N, 5, 32): each bitboard unpacked to one 0/1 value per square
+        on = ((bits.unsqueeze(-1) >> self.shifts) & 1).to(torch.float32)
+        out = torch.zeros(
+            (n, NUM_PLANES, 64), dtype=torch.float32, device=bits.device
+        )
+        out[:, :NUM_BITBOARDS, self.square_index] = on
+        out[:, NUM_BITBOARDS] = scalars[:, 0:1]
+        out[:, NUM_BITBOARDS + 1] = scalars[:, 1:2]
+        out[:, NUM_BITBOARDS + 2] = 1.0
+        return out.view(n, NUM_PLANES, 8, 8)

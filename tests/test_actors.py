@@ -106,3 +106,23 @@ def test_cpu_plan(monkeypatch, logical, physical, workers, expected):
         actors.psutil, 'cpu_count', lambda logical=True: cpu_count(logical)
     )
     assert actors.cpu_plan(workers) == expected
+
+
+@pytest.mark.slow  # starts worker processes
+def test_arena_runs_on_the_workers(tmp_path):
+    """With workers, arena games (including the previous checkpoint, served
+    as a second model) are played on them and tallied correctly."""
+    config = actor_config(workers=2)
+    config.arena.every = 1
+    config.arena.games = 4
+    config.arena.sims = 4
+    config.arena.opponents = ['random']
+    config.arena.max_plies = 40
+    Trainer.new(config, tmp_path / 'run').run()
+    rows = RunStore.open(tmp_path / 'run').read_arena()
+    assert [r['iteration'] for r in rows] == [0, 1]
+    assert [r['opponent'] for r in rows[1]['results']] == ['random', 'iter 0']
+    for result in rows[1]['results']:
+        assert result['wins'] + result['draws'] + result['losses'] == 4
+    games = (tmp_path / 'run' / 'games' / 'arena_0001.jsonl').read_text()
+    assert len(games.splitlines()) == 8

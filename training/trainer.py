@@ -57,12 +57,18 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from core.encoding import planes
+from core.game import Position
 from core.inference import NetEvaluator
 from core.model import CheckersNet, load_model
 from core.players import make_player
 from training.actors import ActorPool
-from training.arena import Contestant, MatchResult, play_match, random_openings
+from training.arena import (
+    Contestant,
+    MatchResult,
+    play_match,
+    random_openings,
+    tally,
+)
 from training.config import RunConfig
 from training.logs import (
     arena_line,
@@ -150,7 +156,7 @@ class Trainer:
         self.buffer = ReplayBuffer(config.train.buffer_size)
         # One evaluator for self-play, probes and the arena, so its CUDA
         # graphs are captured once. It always sees the latest weights.
-        self.evaluator = NetEvaluator(self.model)
+        self.evaluator = NetEvaluator(self.model, backend=config.backend)
         # Kept for the whole run so unfinished games carry over (see
         # training.self_play).
         self.self_play = SelfPlay(
@@ -162,6 +168,9 @@ class Trainer:
         )
         # Worker processes for self-play, started by run() when configured
         self.actors: ActorPool | None = None
+        # 'auto' backend trial: sims/s measured per backend (see _try_backend)
+        self._trial: dict[str, float] = {}
+        self._trial_step = 0
         self.iteration = 0  # next iteration to run
         self.step = 0  # optimiser steps taken
         self.saved_iteration = -1  # last iteration in a checkpoint
@@ -211,6 +220,12 @@ class Trainer:
             progress_bars = interactive()
         self.progress = Progress(cfg.iterations, self.iteration, progress_bars)
         workers = self.config.self_play.workers
+        built = self.evaluator.prepare()  # e.g. the TensorRT engine
+        note = f', engine built in {built:.0f} s' if built else ''
+        what = self.evaluator.describe()
+        if len(self.evaluator.candidates()) > 1:
+            what = 'auto: trying CUDA graphs and TensorRT on iterations 2-3'
+        event(self.log, 'RUN', f'inference backend: {what}{note}')
         try:
             if workers > 0 and self.iteration < cfg.iterations:
                 event(self.log, 'RUN', f'starting {workers} self-play workers')
@@ -261,6 +276,7 @@ class Trainer:
         )
         self.model.eval()
         games = cfg.self_play.games_per_iteration
+        trying = self._try_backend()
         if self.actors is not None:
             # this process serves the workers' network evaluations
             new, saved, sp = self.actors.play(self.evaluator, games, self._tick)
@@ -271,6 +287,8 @@ class Trainer:
             del records
         self.buffer.add(new)
         self.store.save_games(f'iter_{i:04d}', saved)
+        if trying is not None:
+            self._trial_result(trying, sp.sims / max(sp.seconds, 1e-9))
 
         t1 = time.perf_counter()
         steps = 0
@@ -349,6 +367,7 @@ class Trainer:
                 totals[key] = totals[key] + value if key in totals else value
             self._tick()
         self.model.eval()
+        self.evaluator.weights_changed()  # TensorRT refits before next use
         # one GPU sync per statistic, for the whole iteration
         return {k: round(float(v) / steps, 4) for k, v in totals.items()}
 
@@ -395,37 +414,50 @@ class Trainer:
         matches = len(cfg.opponents) + play_previous
         self._phase_start('arena', matches * 2 * len(openings), 'game')
 
-        def match(opponent: Contestant) -> MatchResult:
-            """Play the arena match against ``opponent``."""
-            return play_match(
-                me,
-                opponent,
-                openings,
-                cfg.max_plies,
-                self.config.search,
-                on_game_end=self._tick,
-            )
+        name = f'iter {i}'
+        prev = history[-1] if play_previous else None
+        prev_name = f'iter {prev["iteration"]}' if prev else ''
+        prev_evaluator = None
+        if prev is not None:
+            path = self.store.checkpoint_path(prev['iteration'])
+            prev_model, _ = load_model(path, self.device)
+            # CUDA graphs: not worth a TensorRT build for one match
+            prev_evaluator = NetEvaluator(prev_model, backend='graphs')
 
-        me = Contestant.network(f'iter {i}', self.evaluator, cfg.sims)
-        results = [
-            match(Contestant.of(make_player(spec, seed=cfg.seed)))
-            for spec in cfg.opponents
-        ]
+        if self.actors is not None:
+            # Spread every game over the workers: alpha-beta runs on their
+            # CPUs, both networks are served from here
+            results = self._arena_on_workers(
+                openings, name, prev_name, prev_evaluator
+            )
+        else:
+            me = Contestant.network(name, self.evaluator, cfg.sims)
+            opponents = [
+                Contestant.of(make_player(spec, seed=cfg.seed))
+                for spec in cfg.opponents
+            ]
+            if prev_evaluator is not None:
+                opponents.append(
+                    Contestant.network(prev_name, prev_evaluator, cfg.sims)
+                )
+            results = [
+                play_match(
+                    me,
+                    opponent,
+                    openings,
+                    cfg.max_plies,
+                    self.config.search,
+                    on_game_end=self._tick,
+                )
+                for opponent in opponents
+            ]
 
         # Elo chain: previous evaluation's rating + head-to-head difference
         elo: float | None = 0.0 if not history else None
-        if play_previous:
-            prev = history[-1]
-            path = self.store.checkpoint_path(prev['iteration'])
-            model, _ = load_model(path, self.device)
-            name = f'iter {prev["iteration"]}'
-            result = match(
-                Contestant.network(name, NetEvaluator(model), cfg.sims)
-            )
-            results.append(result)
-            if prev.get('elo') is not None:
-                elo = prev['elo'] + result.elo_diff
-            del model  # free its weights and CUDA graphs before training on
+        if prev is not None and prev.get('elo') is not None:
+            elo = prev['elo'] + results[-1].elo_diff
+        if prev_evaluator is not None:
+            del prev_evaluator  # free its weights and CUDA graphs
             if self.device.type == 'cuda':
                 torch.cuda.empty_cache()
 
@@ -447,6 +479,42 @@ class Trainer:
         self.last_elo = row['elo']
         return row
 
+    def _arena_on_workers(
+        self,
+        openings: list[Position],
+        name: str,
+        prev_name: str,
+        prev_evaluator: NetEvaluator | None,
+    ) -> list[MatchResult]:
+        """Play the arena's games on the self-play workers; one result per
+        opponent, the previous checkpoint last."""
+        assert self.actors is not None
+        cfg = self.config.arena
+        sides = list(cfg.opponents) + (['prev'] if prev_evaluator else [])
+        tasks = []
+        for opponent in sides:
+            for opening in openings:
+                fen = opening.to_fen()
+                tasks.append((len(tasks), fen, 'net', opponent))
+                tasks.append((len(tasks), fen, opponent, 'net'))
+        settings = {
+            'names': {'net': name, 'prev': prev_name},
+            'sims': cfg.sims,
+            'max_plies': cfg.max_plies,
+            'seed': cfg.seed,
+        }
+        evaluators = [self.evaluator]
+        if prev_evaluator is not None:
+            evaluators.append(prev_evaluator)
+        games = self.actors.play_arena(evaluators, settings, tasks, self._tick)
+        names = [
+            prev_name
+            if side == 'prev'
+            else make_player(side, seed=cfg.seed).name
+            for side in sides
+        ]
+        return [tally(name, other, games) for other in names]
+
     # -- helpers ---------------------------------------------------------------
 
     def _tensors(
@@ -458,9 +526,11 @@ class Trainer:
             """Move a numpy array to the training device."""
             return torch.from_numpy(array).to(self.device, non_blocking=True)
 
-        x = to(planes(batch.bits, batch.scalars))
+        # planes are expanded on the GPU from the compact features
+        bits = to(batch.bits.astype(np.int64))
+        x = self.evaluator.expander(bits, to(batch.scalars))
         if self.device.type == 'cuda':
-            x = x.to(memory_format=torch.channels_last)  # matches the model
+            x = x.contiguous(memory_format=torch.channels_last)  # as model
         target = to(batch.policy.astype(np.float32))
         mask = to(batch.legal_mask())
         wdl = to(batch.wdl.astype(np.int64))
@@ -473,6 +543,39 @@ class Trainer:
         cosine = 0.5 * (1 + math.cos(math.pi * progress))
         lr = cfg.lr_min + (cfg.lr - cfg.lr_min) * cosine
         return lr * min(1.0, (self.step + 1) / max(cfg.warmup_steps, 1))
+
+    def _try_backend(self) -> str | None:
+        """Pick this iteration's backend while ``auto`` is still deciding.
+
+        Iteration 1 warms up on CUDA graphs (first-use costs would skew it),
+        then TensorRT and CUDA graphs get one iteration each. Returns the
+        backend to measure this iteration, or None.
+        """
+        options = self.evaluator.candidates()
+        if len(options) < 2:
+            return None
+        order = ['graphs', 'tensorrt', 'graphs']
+        backend = order[min(self._trial_step, 2)]
+        self._trial_step += 1
+        self.evaluator.use(backend)
+        return None if self._trial_step == 1 else backend
+
+    def _trial_result(self, backend: str, rate: float) -> None:
+        """Record a trial iteration; once both are measured, settle."""
+        self._trial[backend] = rate
+        if len(self._trial) < 2:
+            return
+        graphs, tensorrt = self._trial['graphs'], self._trial['tensorrt']
+        # TensorRT must clearly win: it also costs a refit per iteration
+        best = 'tensorrt' if tensorrt > graphs * 1.05 else 'graphs'
+        note = (
+            f'auto: TensorRT {tensorrt / 1e3:.0f}k vs graphs '
+            f'{graphs / 1e3:.0f}k sims/s'
+        )
+        self.evaluator.settle(best, note)
+        event(
+            self.log, 'RUN', f'inference backend: {self.evaluator.describe()}'
+        )
 
     def _phase_start(self, name: str, total: int, unit: str) -> None:
         """Begin a phase: a fresh progress bar and a status update."""
@@ -547,6 +650,7 @@ class Trainer:
     def _restore(self, ckpt: dict[str, Any]) -> None:
         """Load model, optimiser, counters, RNG and buffer from ``ckpt``."""
         self.model.load_state_dict(ckpt['model_state'])
+        self.evaluator.weights_changed()
         self.optimizer.load_state_dict(ckpt['optimizer_state'])
         self.iteration = ckpt['iteration'] + 1
         self.saved_iteration = ckpt['iteration']

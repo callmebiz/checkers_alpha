@@ -76,9 +76,17 @@ for playing, watching, analysing and following training.
   trainer process is the GPU inference server. Hot-path data goes through
   shared memory and the mailbox states, never pipes. Worker tests are
   marked `slow`.
-- Benchmarks: compare sims/s, not games/s (games carry over between
-  iterations, which skews short runs). Close other GPU programs first, and
-  never benchmark while a user's training run is going.
+- Benchmarks: compare seconds per iteration and sims/s, not games/s
+  (games carry over between iterations; cache hits count as sims without
+  using the GPU). Close other GPU programs first, never benchmark while a
+  user's training run is going, and never edit code a running benchmark
+  imports (each run spawns fresh workers that load the files on disk).
+  When stopping a background benchmark, kill the whole process tree
+  (shell, train.py and workers): stopping the task alone leaves them.
+- TensorRT (optional `torch-tensorrt`): engines must be re-wrapped after a
+  refit (in-place refit silently breaks the recorded CUDA graphs). Players,
+  probe back-fill and the arena's previous checkpoint use `backend='graphs'`
+  to avoid an engine build.
 - The machine is an i9-12900K (8 hyperthreaded P-cores = CPUs 0-15, 8
   E-cores = 16-23) with an RTX 3070 (8 GB), 32 GB RAM.
 

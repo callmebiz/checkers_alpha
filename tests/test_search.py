@@ -23,7 +23,7 @@ from core.game import (
     Position,
 )
 from core.inference import NetEvaluator, UniformEvaluator
-from core.mcts import SearchTree, run_search
+from core.mcts import SearchConfig, SearchTree, run_search
 from core.model import CheckersNet, ModelConfig, load_model, save_model
 from core.players import (
     AlphaBetaPlayer,
@@ -277,17 +277,21 @@ def test_make_player_specs(tmp_path):
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='needs CUDA')
 def test_cuda_graphs_match_eager_and_follow_weight_updates():
-    """Graph replays match plain execution and see weight updates."""
+    """Graph replays match plain execution and see weight updates.
+
+    Both run in bf16, and graphs pad the batch (which can change the
+    GPU's algorithm choice), so they agree to bf16 precision.
+    """
     torch.manual_seed(0)
     model = CheckersNet(TINY).cuda()
     positions = random_positions(2)[:37]  # pads up to a 64-row graph
-    graphs = NetEvaluator(model, use_amp=False)
-    eager = NetEvaluator(model, use_amp=False, use_cuda_graphs=False)
+    graphs = NetEvaluator(model, backend='graphs')
+    eager = NetEvaluator(model, backend='eager')
     for batch in (positions[:1], positions[:5], positions):
         got, want = graphs.evaluate(batch), eager.evaluate(batch)
-        assert np.allclose(got.values, want.values, atol=1e-5)
+        assert np.allclose(got.values, want.values, atol=1e-2)
         for p, q in zip(got.priors, want.priors, strict=True):
-            assert np.allclose(p, q, atol=1e-5)
+            assert np.allclose(p, q, atol=1e-2)
 
     # a training step changes the weights in place; replays must see it
     before = graphs.evaluate(positions).values.copy()
@@ -299,7 +303,7 @@ def test_cuda_graphs_match_eager_and_follow_weight_updates():
     model.eval()
     after = graphs.evaluate(positions).values
     assert not np.allclose(before, after)
-    assert np.allclose(after, eager.evaluate(positions).values, atol=1e-5)
+    assert np.allclose(after, eager.evaluate(positions).values, atol=1e-2)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='needs CUDA')
@@ -313,7 +317,7 @@ def test_evaluators_with_cuda_graphs_do_not_leak_gpu_memory():
     def cycle() -> int:
         """Create, use and discard an evaluator; return GPU memory in use."""
         model = CheckersNet(TINY).cuda()
-        NetEvaluator(model).evaluate(positions)
+        NetEvaluator(model, backend='graphs').evaluate(positions)
         del model
         gc.collect()
         torch.cuda.empty_cache()
@@ -323,3 +327,88 @@ def test_evaluators_with_cuda_graphs_do_not_leak_gpu_memory():
     baseline = cycle()
     for _ in range(3):
         assert cycle() <= baseline
+
+
+def _tensorrt_ready() -> bool:
+    """Whether a GPU and a working torch_tensorrt are available."""
+    from core.inference import _tensorrt_available
+
+    return torch.cuda.is_available() and _tensorrt_available()
+
+
+@pytest.mark.slow  # builds a TensorRT engine (~10 s)
+@pytest.mark.skipif(not _tensorrt_ready(), reason='needs CUDA + TensorRT')
+def test_tensorrt_matches_eager_and_refits_after_training():
+    """The TensorRT engine agrees with plain PyTorch, and still does after
+    the weights change (it must be refitted)."""
+    torch.manual_seed(0)
+    model = CheckersNet(TINY).cuda()
+    trt = NetEvaluator(model, backend='tensorrt')
+    eager = NetEvaluator(model, backend='eager')
+    positions = random_positions(2)[:300]
+
+    def close() -> bool:
+        """Values and priors agree within half-precision tolerance."""
+        got, want = trt.evaluate(positions), eager.evaluate(positions)
+        priors = all(
+            np.allclose(p, q, atol=2e-2)
+            for p, q in zip(got.priors, want.priors, strict=True)
+        )
+        return priors and np.allclose(got.values, want.values, atol=2e-2)
+
+    assert close()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.5)
+    model.train()
+    policy, wdl = model(torch.from_numpy(encode(positions)).cuda())
+    (policy.square().mean() + wdl.square().mean()).backward()
+    optimizer.step()
+    model.eval()
+    trt.weights_changed()
+    assert close()
+
+
+def test_eval_cache_keys_include_draw_counters():
+    """Same board with different draw counters is a different entry (the
+    counters are part of the network input); clear() forgets everything."""
+    from core.inference import EvalCache
+
+    cache = EvalCache(capacity=100)
+    a = Position.from_fen('B:WK32:BK1')
+    b = Position(a.black, a.white, a.kings, a.turn, no_progress=10)
+    cache.put(a, np.array([0.5, 0.5]), 0.1, np.array([0.3, 0.5, 0.2]))
+    assert cache.get(a) is not None and cache.get(b) is None
+    assert (cache.lookups, cache.hits) == (2, 1)
+    cache.clear()
+    assert cache.get(a) is None and len(cache.entries) == 0
+
+
+def test_eval_cache_drops_oldest_when_full():
+    """The cache never grows past its capacity; the oldest go first."""
+    from core.inference import EvalCache
+
+    cache = EvalCache(capacity=10)
+    positions = random_positions(1)[:30]
+    for p in positions:
+        cache.put(p, np.ones(1), 0.0, np.zeros(3))
+    assert len(cache.entries) == 10
+    assert cache.get(positions[-1]) is not None
+
+
+def test_self_play_cache_saves_network_calls():
+    """With the cache on, part of the searches' leaves come from it."""
+    from training.config import SelfPlayConfig
+    from training.self_play import SelfPlay
+
+    config = SelfPlayConfig(
+        concurrent_games=4, sims=32, fast_sims=16, max_plies=40
+    )
+    self_play = SelfPlay(
+        UniformEvaluator(),
+        config,
+        SearchConfig(),
+        Position.initial().rules,
+        np.random.default_rng(0),
+    )
+    _, stats = self_play.play(4)
+    assert stats.cache_lookups > 0 and stats.cache_hits > 0
+    assert stats.evaluated < stats.sims  # hits never reached the network

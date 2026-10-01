@@ -60,12 +60,28 @@ to a replay buffer, and trains on it.
 How self-play uses the machine: worker processes (`self_play.workers`)
 run the tree searches on CPU cores, and the trainer process serves all their
 network evaluations on the GPU in large combined batches (see
-[training/actors.py](training/actors.py)). On an i9-12900K + RTX 3070 the
-dev config reaches ~150k simulations/s with 7 workers, against ~40k in a
-single process. Past ~7 workers the single server process is the limit, so
-more don't help. Each worker needs ~0.5 GB of RAM. `self_play.pin_cpus`
-(on by default) gives the server a core of its own and puts workers on the
-fast cores first.
+[training/actors.py](training/actors.py)). Workers also play the arena's
+games. Past ~7 workers the single server process is the limit, so more
+don't help. Each worker needs ~0.5 GB of RAM. `self_play.pin_cpus` (on by
+default) gives the server a core of its own and puts workers on the fast
+cores first.
+
+How the network is run (`backend`): `auto` (default) runs iteration 2 on
+TensorRT and iteration 3 on CUDA graphs, then keeps whichever played
+faster (the log says which, with both speeds). TensorRT computes the
+network ~2x faster but costs more CPU per call, so it wins for the large
+`full` network (GPU-bound) and loses for the small `dev` one (whose server
+is CPU-bound). Without the optional TensorRT packages, CUDA graphs are
+used.
+Repeated positions are answered from a per-worker cache
+(`self_play.eval_cache`): 15-30% of lookups hit and skip the GPU.
+
+Speed on an i9-12900K + RTX 3070, per 512-game iteration:
+
+| config | before workers | now |
+|---|---|---|
+| dev (6x64, 200 sims) | ~60 s | ~20 s |
+| full (10x128, 400 sims) | ~290 s | ~70 s |
 
 In a terminal you get two progress bars: the run (with the latest losses,
 draw rate, speed and Elo) and the current phase (self-play games, training

@@ -33,7 +33,7 @@ difference stays finite.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -139,10 +139,64 @@ def random_openings(
 class _Game:
     pos: Position
     seats: tuple[Contestant, Contestant]  # indexed by color
-    a_color: int
     opening: str
     trees: list[SearchTree | None] = field(default_factory=lambda: [None, None])
     actions: list[int] = field(default_factory=list)
+
+
+# An arena game to play: (opening, Black's contestant, White's contestant)
+type Pairing = tuple[Position, Contestant, Contestant]
+
+
+def play_games(
+    pairings: Sequence[Pairing],
+    max_plies: int = 300,
+    search: SearchConfig | None = None,
+    on_game_end: Callable[[], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Play every pairing to the end; return one record per game.
+
+    A record holds the opening FEN (``start``), the contestants' names
+    (``black``, ``white``), the ``winner`` colour (None for a draw),
+    ``plies`` and the ``actions`` played. ``on_game_end`` is called as each
+    game finishes (for progress bars).
+    """
+    games = [
+        _Game(opening, (black, white), opening.to_fen())
+        for opening, black, white in pairings
+    ]
+    _play_all(games, max_plies, search or SearchConfig(), on_game_end)
+    records = []
+    for game in games:
+        winner = 1 - game.pos.turn if game.pos.result() == -1 else None
+        records.append(
+            {
+                'start': game.opening,
+                'black': game.seats[BLACK].name,
+                'white': game.seats[WHITE].name,
+                'winner': None if winner is None else COLOR_NAMES[winner],
+                'plies': len(game.actions),
+                'actions': game.actions,
+            }
+        )
+    return records
+
+
+def tally(a: str, b: str, games: Sequence[dict[str, Any]]) -> MatchResult:
+    """The match result between contestants named ``a`` and ``b``, from
+    the game records ``play_games`` returns (other games are ignored)."""
+    result = MatchResult(a, b)
+    for game in games:
+        if {game['black'], game['white']} != {a, b}:
+            continue
+        if game['winner'] is None:
+            result.draws += 1
+        elif game[game['winner']] == a:
+            result.wins += 1
+        else:
+            result.losses += 1
+        result.games.append(game)
+    return result
 
 
 def play_match(
@@ -157,34 +211,11 @@ def play_match(
 
     ``on_game_end`` is called as each game finishes (for progress bars).
     """
-    games = []
+    pairings: list[Pairing] = []
     for opening in openings:
-        fen = opening.to_fen()
-        games.append(_Game(opening, (a, b), BLACK, fen))
-        games.append(_Game(opening, (b, a), WHITE, fen))
-    _play_all(games, max_plies, search or SearchConfig(), on_game_end)
-
-    result = MatchResult(a.name, b.name)
-    for game in games:
-        outcome = game.pos.result()
-        winner = 1 - game.pos.turn if outcome == -1 else None
-        if winner is None:
-            result.draws += 1
-        elif winner == game.a_color:
-            result.wins += 1
-        else:
-            result.losses += 1
-        result.games.append(
-            {
-                'start': game.opening,
-                'black': game.seats[BLACK].name,
-                'white': game.seats[WHITE].name,
-                'winner': None if winner is None else COLOR_NAMES[winner],
-                'plies': len(game.actions),
-                'actions': game.actions,
-            }
-        )
-    return result
+        pairings += [(opening, a, b), (opening, b, a)]
+    games = play_games(pairings, max_plies, search, on_game_end)
+    return tally(a.name, b.name, games)
 
 
 def _play_all(

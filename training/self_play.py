@@ -53,7 +53,7 @@ import numpy.typing as npt
 
 from core.encoding import canonical_actions, features, legal_mask
 from core.game import ACTION_SIZE, COLOR_NAMES, Position, Rules
-from core.inference import Evaluator, Pending, submit
+from core.inference import EvalCache, Evaluator, Pending, submit
 from core.mcts import Leaf, SearchConfig, SearchTree, Selection
 from training.config import SelfPlayConfig
 from training.replay_buffer import DRAW, LOSS, WIN, Samples
@@ -93,6 +93,8 @@ class SelfPlayStats:
     sims: int = 0  # simulations run (visits kept by tree reuse excluded)
     evaluated: int = 0  # positions sent to the network
     batches: int = 0  # network calls
+    cache_lookups: int = 0  # positions looked up in the evaluation cache
+    cache_hits: int = 0  # ... and found there (no network call needed)
     seconds: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
@@ -128,6 +130,10 @@ class SelfPlay:
     ) -> None:
         """Games are searched with ``evaluator``; ``rng`` drives all chance."""
         self.evaluator = evaluator
+        # Results of recently evaluated positions: hits skip the network
+        self.cache = (
+            EvalCache(config.eval_cache) if config.eval_cache > 0 else None
+        )
         self.config = config
         self.search = search
         self.rules = rules
@@ -150,6 +156,8 @@ class SelfPlay:
         start_time = time.perf_counter()
         records: list[GameRecord] = []
         self._to_log = self.config.saved_games
+        if self.cache is not None:
+            self.cache.clear()  # new weights: cached evaluations are stale
         for game in self.games:  # the network changed since their last search
             game.tree = SearchTree(
                 game.tree.root.pos, self.search, rng=self.rng
@@ -200,6 +208,9 @@ class SelfPlay:
                 stats.black_wins += 1
             else:
                 stats.white_wins += 1
+        if self.cache is not None:
+            stats.cache_lookups = self.cache.lookups
+            stats.cache_hits = self.cache.hits
         stats.seconds = time.perf_counter() - start_time
         return records, stats
 
@@ -208,8 +219,11 @@ class SelfPlay:
     ) -> None:
         """Wait for a batch's evaluation and back it up into its trees."""
         priors, values, wdl = pending.result()
+        cache = self.cache
         for i, leaf in enumerate(leaves):
             leaf.tree.expand_and_backup(leaf, priors[i], values[i], wdl[i])
+            if cache is not None:
+                cache.put(leaf.node.pos, priors[i], float(values[i]), wdl[i])
         stats.evaluated += len(leaves)
         stats.batches += 1
         stats.sims += len(leaves)
@@ -245,7 +259,15 @@ class SelfPlay:
                 continue
             selected = tree.select_leaf()
             if isinstance(selected, Leaf):
-                return selected
+                cached = (
+                    self.cache.get(selected.node.pos) if self.cache else None
+                )
+                if cached is None:
+                    return selected
+                # seen before: expand now, no network call, keep searching
+                tree.expand_and_backup(selected, *cached)
+                stats.sims += 1
+                continue
             if selected is Selection.TERMINAL:
                 stats.sims += 1
             # (a collision can't happen with one leaf in flight per tree)

@@ -11,7 +11,8 @@ A config file has these sections, each optional (defaults fill in)::
       "arena":     {...},   ArenaConfig              strength evaluation
       "probes":    {...},   ProbeConfig              probe positions
       "seed": 0,
-      "device": "cuda"
+      "device": "cuda",
+      "backend": "auto"
     }
 
 Unknown keys raise an error, so a typo can't silently fall back to a default.
@@ -57,6 +58,9 @@ class SelfPlayConfig:
     temperature_plies: int = 16  # sample moves for this many opening plies
     temperature: float = 1.0  # ... at this temperature; then play the best
     max_plies: int = 400  # adjudicate a draw after this many plies
+    # Evaluations remembered per worker (core.inference.CachedEvaluator), so
+    # repeated positions skip the network; 0 turns the cache off.
+    eval_cache: int = 100_000
     saved_games: int = 4  # games per iteration kept for replay in the UI
 
 
@@ -109,6 +113,10 @@ class RunConfig:
     probes: ProbeConfig = field(default_factory=ProbeConfig)
     seed: int | None = None
     device: str = 'cuda'
+    # How the trainer runs the network for self-play, probes and the arena:
+    # 'auto' (TensorRT if installed, else CUDA graphs), 'tensorrt',
+    # 'graphs' or 'eager'. See core.inference.NetEvaluator.
+    backend: str = 'auto'
 
     def to_dict(self) -> dict[str, Any]:
         """The config as nested plain dicts, ready for JSON."""
@@ -122,7 +130,7 @@ class RunConfig:
         for key, value in data.items():
             if key in sections:
                 kwargs[key] = _build(sections[key], value, key)
-            elif key in ('seed', 'device'):
+            elif key in ('seed', 'device', 'backend'):
                 kwargs[key] = value
             else:
                 raise ValueError(f'Unknown config key {key!r}')

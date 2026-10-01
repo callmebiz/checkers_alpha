@@ -78,6 +78,14 @@ def _z(value: float) -> float:
     return value if abs(value) >= 0.005 else 0.0
 
 
+def _cache_note(sp: dict[str, Any]) -> str:
+    """``, cache hits 23%`` when the evaluation cache was used."""
+    lookups = sp.get('cache_lookups', 0)
+    if not lookups:
+        return ''
+    return f', cache hits {sp["cache_hits"] / lookups:.0%}'
+
+
 def _mb(value: float) -> str:
     """A memory amount, e.g. ``1,641 MB``."""
     return f'{value:,.0f} MB'
@@ -125,7 +133,7 @@ def iteration_report(row: dict[str, Any], config: RunConfig) -> str:
         f'({sp["draws"] / games:.0%})',
         f'length    {row["avg_plies"]:.1f} plies on average',
         f'search    {sp["sims"]:,} sims at {row["sims_per_second"]:,}/s, '
-        f'{sp["batches"]:,} batches of {batch:.0f}',
+        f'{sp["batches"]:,} batches of {batch:.0f}' + _cache_note(sp),
         f'buffer    +{row["new_samples"]:,} -> {row["buffer_size"]:,} of '
         f'{t.buffer_size:,}  ({row["buffer_total"]:,} added in total)',
     ]

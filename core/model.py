@@ -84,8 +84,7 @@ class CheckersNet(nn.Module):
     ``(policy_logits (N, 256), wdl_logits (N, 3))``.
     """
 
-    square_row: torch.Tensor
-    square_col: torch.Tensor
+    square_index: torch.Tensor
 
     def __init__(self, config: ModelConfig | None = None) -> None:
         """Build the stem, the residual tower and both heads from ``config``."""
@@ -119,20 +118,21 @@ class CheckersNet(nn.Module):
             nn.Linear(self.config.value_hidden, 3),
         )
 
-        # Grid coordinates of the 32 dark squares, used to read the policy map
+        # Where the 32 dark squares sit in the flattened 8x8 policy map
         self.register_buffer(
-            'square_row', torch.as_tensor(SQUARE_ROW), persistent=False
-        )
-        self.register_buffer(
-            'square_col', torch.as_tensor(SQUARE_COL), persistent=False
+            'square_index',
+            torch.as_tensor(SQUARE_ROW * 8 + SQUARE_COL),
+            persistent=False,
         )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Input planes to ``(policy_logits, wdl_logits)``."""
         x = self.blocks(self.stem(x))
         hop_map = self.policy_head(x)  # (N, 8, 8, 8): hop type x row x col
-        # (N, 8, 32): keep the dark squares only
-        hops = hop_map[:, :, self.square_row, self.square_col]
+        # (N, 8, 32): keep the dark squares only. A gather with one fixed
+        # index (rather than indexing rows and columns separately) compiles
+        # to a static-shape TensorRT engine.
+        hops = hop_map.flatten(2).index_select(2, self.square_index)
         # (N, 256), ordered square * 8 + hop like the actions
         policy = hops.transpose(1, 2).reshape(x.shape[0], -1)
         return policy, self.value_head(x)

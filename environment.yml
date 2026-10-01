@@ -7,6 +7,12 @@ dependencies:
   - pip:
       - --extra-index-url https://download.pytorch.org/whl/cu130
       - torch==2.9.1
+      # optional: TensorRT inference (backend 'auto' uses it when faster)
+      - torch-tensorrt==2.9.0
+      - tensorrt>=10.13,<10.14
+      - tensorrt-cu13>=10.13,<10.14
+      - tensorrt-cu13-bindings>=10.13,<10.14
+      - tensorrt-cu13-libs>=10.13,<10.14
       - numpy>=2.3
       - tqdm
       - psutil

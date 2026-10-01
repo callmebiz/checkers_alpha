@@ -26,8 +26,8 @@ carry low-volume control messages.
 
 Each worker has two *slots*, one per pipelined group of games (see
 ``training.self_play``). A slot holds up to ``capacity`` input positions (as
-network planes) and room for their outputs. A shared *mailbox* holds one
-state per slot::
+compact features, expanded to planes on the GPU) and room for their
+outputs. A shared *mailbox* holds one state per slot::
 
     FREE ----(worker writes inputs, sets)----> REQUEST
     REQUEST --(server picks it up, sets)-----> BUSY
@@ -67,19 +67,21 @@ import os
 import time
 import traceback
 from collections import deque
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import fields
 from multiprocessing.shared_memory import SharedMemory
 from typing import Any, NoReturn
 
 import numpy as np
+import torch
 
 try:
     import psutil
 except ImportError:  # optional: without it, processes aren't pinned
     psutil = None
 
-from core.encoding import NUM_PLANES, encode
+from core.encoding import NUM_BITBOARDS, features
 from core.game import Position
 from core.inference import (
     OUTPUT_SIZE,
@@ -88,6 +90,8 @@ from core.inference import (
     RawPending,
     to_evaluation,
 )
+from core.players import make_player
+from training.arena import Contestant, play_games
 from training.config import RunConfig
 from training.replay_buffer import Samples
 from training.self_play import SelfPlay, SelfPlayStats
@@ -177,52 +181,63 @@ class Shared:
 
 
 class Slots(Shared):
-    """A worker's input and output slots."""
+    """A worker's input and output slots.
+
+    Inputs are compact features (see ``core.encoding.features``): 40 bytes
+    per position instead of 2 KB of planes. The server expands them on the
+    GPU.
+    """
 
     def __init__(self, capacity: int, name: str | None = None) -> None:
         """Room for ``capacity`` positions per slot."""
         self.capacity = capacity
-        in_bytes = capacity * NUM_PLANES * 64 * 4
+        bits_bytes = capacity * NUM_BITBOARDS * 8
+        scalar_bytes = capacity * 2 * 4
         out_bytes = capacity * OUTPUT_SIZE * 4
-        super().__init__(SLOTS * (in_bytes + out_bytes), name)
-        self.inputs = [
-            self.array(
-                (capacity, NUM_PLANES, 8, 8),
-                np.float32,
-                k * (in_bytes + out_bytes),
-            )
+        per_slot = bits_bytes + scalar_bytes + out_bytes
+        super().__init__(SLOTS * per_slot, name)
+        self.bits = [
+            self.array((capacity, NUM_BITBOARDS), np.int64, k * per_slot)
+            for k in range(SLOTS)
+        ]
+        self.scalars = [
+            self.array((capacity, 2), np.float32, k * per_slot + bits_bytes)
             for k in range(SLOTS)
         ]
         self.outputs = [
             self.array(
                 (capacity, OUTPUT_SIZE),
                 np.float32,
-                k * (in_bytes + out_bytes) + in_bytes,
+                k * per_slot + bits_bytes + scalar_bytes,
             )
             for k in range(SLOTS)
         ]
 
     def close(self) -> None:
         """Drop the views, then the block."""
-        self.inputs.clear()
+        self.bits.clear()
+        self.scalars.clear()
         self.outputs.clear()
         super().close()
 
 
 class Mailbox(Shared):
-    """Slot states and position counts for all workers, plus a stop flag."""
+    """Per worker and slot: state, position count and which model to use
+    (0 = the current network, 1 = the previous checkpoint in an arena
+    match); plus a stop flag."""
 
     def __init__(self, workers: int, name: str | None = None) -> None:
-        """One ``(state, count)`` pair per worker and slot."""
-        super().__init__((workers * SLOTS * 2 + 1) * 8, name)
-        cells = self.array((workers, SLOTS, 2), np.int64)
+        """One ``(state, count, model)`` triple per worker and slot."""
+        super().__init__((workers * SLOTS * 3 + 1) * 8, name)
+        cells = self.array((workers, SLOTS, 3), np.int64)
         self.state = cells[:, :, 0]  # (workers, SLOTS)
         self.count = cells[:, :, 1]
-        self.stop = self.array((1,), np.int64, workers * SLOTS * 2 * 8)
+        self.model = cells[:, :, 2]
+        self.stop = self.array((1,), np.int64, workers * SLOTS * 3 * 8)
 
     def close(self) -> None:
         """Drop the views, then the block."""
-        del self.state, self.count, self.stop
+        del self.state, self.count, self.model, self.stop
         super().close()
 
 
@@ -259,13 +274,24 @@ class RemoteEvaluator:
     uses it).
     """
 
-    def __init__(self, index: int, slots: Slots, mailbox: Mailbox) -> None:
-        """Worker ``index``'s view of its slots and the mailbox."""
+    def __init__(
+        self,
+        index: int,
+        slots: Slots,
+        mailbox: Mailbox,
+        model: int = 0,
+        free: list[int] | None = None,
+    ) -> None:
+        """Worker ``index``'s view of its slots and the mailbox, asking
+        for network ``model``. Evaluators of one worker share ``free``, its
+        list of unused slots."""
         self.slots = slots
         self.state = mailbox.state[index]
         self.count = mailbox.count[index]
+        self.model_cell = mailbox.model[index]
         self.stop = mailbox.stop
-        self.free = list(range(SLOTS))
+        self.model = model
+        self.free = free if free is not None else list(range(SLOTS))
 
     def submit(self, positions: Sequence[Position]) -> _RemotePending:
         """Encode ``positions`` into a free slot and post the request."""
@@ -273,8 +299,11 @@ class RemoteEvaluator:
         if n > self.slots.capacity:
             raise ValueError(f'{n} positions exceed slot capacity')
         slot = self.free.pop(0)
-        self.slots.inputs[slot][:n] = encode(positions)
+        bits, scalars = features(positions)
+        self.slots.bits[slot][:n] = bits
+        self.slots.scalars[slot][:n] = scalars
         self.count[slot] = n
+        self.model_cell[slot] = self.model
         self.state[slot] = REQUEST  # last: the data above is now complete
         return _RemotePending(self, slot, positions)
 
@@ -301,8 +330,63 @@ class RemoteEvaluator:
         return evaluation
 
     def evaluate(self, positions: Sequence[Position]) -> Evaluation:
-        """Evaluate and wait for the result."""
-        return self.submit(positions).result()
+        """Evaluate and wait, in slot-sized chunks if there are many."""
+        size = self.slots.capacity
+        if len(positions) <= size:
+            return self.submit(positions).result()
+        parts = [
+            self.submit(positions[i : i + size]).result()
+            for i in range(0, len(positions), size)
+        ]
+        return Evaluation(
+            [p for part in parts for p in part.priors],
+            np.concatenate([part.values for part in parts]),
+            np.concatenate([part.wdl for part in parts]),
+        )
+
+
+def _play_arena(
+    index: int,
+    cfg: RunConfig,
+    conn: Conn,
+    slots: Slots,
+    mailbox: Mailbox,
+    free: list[int],
+    settings: dict[str, Any],
+    tasks: list[tuple[int, str, str, str]],
+) -> list[dict[str, Any]]:
+    """Play this worker's share of an arena: ``tasks`` are ``(id, opening
+    FEN, Black, White)``, each side ``'net'`` (current network), ``'prev'``
+    (previous checkpoint) or a player spec such as ``'ab:4'``."""
+    contestants: dict[str, Contestant] = {}
+
+    def contestant(spec: str) -> Contestant:
+        """One contestant per spec, so their searches batch together."""
+        if spec not in contestants:
+            if spec in ('net', 'prev'):
+                model = 0 if spec == 'net' else 1
+                remote = RemoteEvaluator(index, slots, mailbox, model, free)
+                contestants[spec] = Contestant.network(
+                    settings['names'][spec], remote, settings['sims']
+                )
+            else:
+                player = make_player(spec, seed=settings['seed'])
+                contestants[spec] = Contestant.of(player)
+        return contestants[spec]
+
+    pairings = [
+        (Position.from_fen(fen, cfg.rules), contestant(b), contestant(w))
+        for _, fen, b, w in tasks
+    ]
+    games = play_games(
+        pairings,
+        settings['max_plies'],
+        cfg.search,
+        lambda: conn.send(('game',)),
+    )
+    for (task_id, *_), game in zip(tasks, games, strict=True):
+        game['id'] = task_id
+    return games
 
 
 def _worker_main(
@@ -329,8 +413,9 @@ def _worker_main(
         mailbox = Mailbox(workers, name=names[1])
         # Each worker gets its own random stream, reproducible from the seed
         seed = None if cfg.seed is None else [cfg.seed, index]
+        free = list(range(SLOTS))  # shared by all of this worker's evaluators
         self_play = SelfPlay(
-            RemoteEvaluator(index, slots, mailbox),
+            RemoteEvaluator(index, slots, mailbox, 0, free),
             cfg.self_play,
             cfg.search,
             cfg.rules,
@@ -340,6 +425,12 @@ def _worker_main(
             task = conn.recv()
             if task[0] == 'stop':
                 return
+            if task[0] == 'arena':
+                games = _play_arena(
+                    index, cfg, conn, slots, mailbox, free, task[1], task[2]
+                )
+                conn.send(('arena_done', games))
+                continue
             records, stats = self_play.play(
                 task[1], lambda _: conn.send(('game',))
             )
@@ -409,50 +500,101 @@ class ActorPool:
 
         Returns the samples, the logged games and the combined statistics.
         ``batches`` and ``evaluated`` in the statistics count the server's
-        GPU batches, so their ratio is the real batch size. While serving,
-        this process is pinned to its CPU (if ``pin_cpus``); afterwards,
-        training and the arena may use any core again.
+        GPU batches, so their ratio is the real batch size.
         """
-        cpu = self.server_cpu
-        me = (
-            psutil.Process() if psutil is not None and cpu is not None else None
-        )
-        before = me.cpu_affinity() if me else None
-        if me and cpu is not None:
-            me.cpu_affinity([cpu])
-        try:
-            return self._serve(evaluator, num_games, on_game_end)
-        finally:
-            if me and before:
-                me.cpu_affinity(before)
-
-    def _serve(
-        self,
-        evaluator: NetEvaluator,
-        num_games: int,
-        on_game_end: Callable[[], None] | None,
-    ) -> tuple[Samples, list[dict[str, Any]], SelfPlayStats]:
-        """The server loop behind ``play``."""
         start = time.perf_counter()
         workers = len(self.processes)
         shares = [
             num_games // workers + (i < num_games % workers)
             for i in range(workers)
         ]
-        for i, (conn, share) in enumerate(zip(self.conns, shares, strict=True)):
-            try:
-                conn.send(('play', share))
-            except OSError:
-                self._died(i)
-
         self._parts: list[Samples] = []
         self._logged: list[dict[str, Any]] = []
         self._stats = SelfPlayStats()
-        self._remaining = sum(share > 0 for share in shares)
+        busy = [i for i, share in enumerate(shares) if share > 0]
+        for i in busy:
+            self._send(i, ('play', shares[i]))
+        with self._pinned(evaluator):
+            batches, evaluated = self._serve([evaluator], busy, on_game_end)
+        stats = self._stats
+        stats.batches, stats.evaluated = batches, evaluated
+        stats.seconds = time.perf_counter() - start
+        return Samples.concat(self._parts), self._logged, stats
+
+    def play_arena(
+        self,
+        evaluators: Sequence[NetEvaluator],
+        settings: dict[str, Any],
+        tasks: Sequence[tuple[int, str, str, str]],
+        on_game_end: Callable[[], None] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Play arena games on the workers; return their records by id.
+
+        ``tasks`` are ``(id, opening FEN, Black, White)`` with each side
+        ``'net'`` (served by ``evaluators[0]``), ``'prev'``
+        (``evaluators[1]``) or a player spec. ``settings`` holds ``names``
+        (for ``'net'``/``'prev'``), ``sims``, ``max_plies`` and ``seed``.
+        Alpha-beta and other plain players run on the workers' CPUs.
+        """
+        workers = len(self.processes)
+        shares = [list(tasks[i::workers]) for i in range(workers)]
+        self._arena_games: list[dict[str, Any]] = []
+        busy = [i for i, share in enumerate(shares) if share]
+        for i in busy:
+            self._send(i, ('arena', settings, shares[i]))
+        with self._pinned(evaluators[0]):
+            self._serve(evaluators, busy, on_game_end)
+        return sorted(self._arena_games, key=lambda g: g['id'])
+
+    def _send(self, i: int, message: tuple[Any, ...]) -> None:
+        """Send a control message to worker ``i``."""
+        try:
+            self.conns[i].send(message)
+        except OSError:
+            self._died(i)
+
+    @contextmanager
+    def _pinned(self, evaluator: NetEvaluator) -> Iterator[None]:
+        """Pin this process to the server CPU while serving (if
+        ``pin_cpus``); afterwards, training may use any core again.
+
+        Only a GPU server is pinned: one on the CPU needs its threads for
+        the network itself.
+        """
+        cpu = self.server_cpu if evaluator.device.type == 'cuda' else None
+        me = (
+            psutil.Process() if psutil is not None and cpu is not None else None
+        )
+        before = me.cpu_affinity() if me else None
+        threads = torch.get_num_threads()
+        if me and cpu is not None:
+            me.cpu_affinity([cpu])
+            torch.set_num_threads(1)  # no thread pool crammed onto one core
+        try:
+            yield
+        finally:
+            if me and before:
+                me.cpu_affinity(before)
+                torch.set_num_threads(threads)
+
+    def _serve(
+        self,
+        evaluators: Sequence[NetEvaluator],
+        busy: list[int],
+        on_game_end: Callable[[], None] | None,
+    ) -> tuple[int, int]:
+        """Serve evaluations until every worker in ``busy`` reports done.
+
+        Requests for different models (``evaluators[k]``) go in separate
+        batches. Returns the number of batches and positions evaluated.
+        """
+        self._remaining = len(busy)
         self._on_game_end = on_game_end
         batches = evaluated = 0
-        state, count = self.mailbox.state, self.mailbox.count
-        waiting: list[Request] = []  # posted, not yet sent to the GPU
+        mailbox = self.mailbox
+        state, count, model = mailbox.state, mailbox.count, mailbox.model
+        # posted requests not yet sent to the GPU, per model
+        waiting: dict[int, list[Request]] = {}
         # Batches on the GPU, oldest first. Up to QUEUED_BATCHES at once, so
         # the GPU starts the next batch the moment one finishes, instead of
         # idling while this process replies and launches.
@@ -469,24 +611,24 @@ class ActorPool:
             posted = np.argwhere(state == REQUEST)
             for w, s in posted:
                 state[w, s] = BUSY
-                waiting.append((int(w), int(s), int(count[w, s])))
+                request = (int(w), int(s), int(count[w, s]))
+                waiting.setdefault(int(model[w, s]), []).append(request)
             while in_flight and in_flight[0][1].done():
                 self._reply(*in_flight.popleft())
             if waiting and len(in_flight) < QUEUED_BATCHES:
-                in_flight.append((waiting, self._launch(evaluator, waiting)))
-                batches += 1
-                evaluated += sum(n for _, _, n in waiting)
-                waiting = []
+                for k, requests in waiting.items():
+                    pending = self._launch(evaluators[k], requests)
+                    in_flight.append((requests, pending))
+                    batches += 1
+                    evaluated += sum(n for _, _, n in requests)
+                waiting = {}
             elif not len(posted):
                 if in_flight:
                     # nothing new to gather: wait for the oldest batch
                     self._reply(*in_flight.popleft())
                 else:
                     time.sleep(IDLE_SLEEP)
-        stats = self._stats
-        stats.batches, stats.evaluated = batches, evaluated
-        stats.seconds = time.perf_counter() - start
-        return Samples.concat(self._parts), self._logged, stats
+        return batches, evaluated
 
     def _read_control(self) -> None:
         """Handle every waiting control message from the workers."""
@@ -503,6 +645,9 @@ class ActorPool:
                     self._logged += games
                     _add_stats(self._stats, worker_stats)
                     self._remaining -= 1
+                elif kind == 'arena_done':
+                    self._arena_games += message[1]
+                    self._remaining -= 1
                 else:  # 'error'
                     self.close()
                     raise RuntimeError(f'worker-{i} failed:\n{message[1]}')
@@ -511,10 +656,13 @@ class ActorPool:
         self, evaluator: NetEvaluator, requests: list[Request]
     ) -> RawPending:
         """Queue the network on every request at once (doesn't wait)."""
-        x = np.concatenate(
-            [self.slots[i].inputs[slot][:n] for i, slot, n in requests]
+        bits = np.concatenate(
+            [self.slots[i].bits[slot][:n] for i, slot, n in requests]
         )
-        return evaluator.submit_planes(x)
+        scalars = np.concatenate(
+            [self.slots[i].scalars[slot][:n] for i, slot, n in requests]
+        )
+        return evaluator.submit_features(bits, scalars)
 
     def _reply(self, requests: list[Request], pending: RawPending) -> None:
         """Wait for a batch's output, then hand each worker its share."""

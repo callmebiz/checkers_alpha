@@ -277,4 +277,5 @@ def make_player(
 def _net_evaluator(path: str, device: str) -> NetEvaluator:
     """Load a checkpoint and wrap its network in an evaluator."""
     model, _ = load_model(path, device)
-    return NetEvaluator(model)
+    # CUDA graphs: no TensorRT build delay when loading a model to play
+    return NetEvaluator(model, backend='graphs')

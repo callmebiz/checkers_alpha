@@ -55,15 +55,18 @@ encoding, so they were deleted.
 ```
 core/
   game.py          bitboard rules: immutable Position, moves, draws, FEN
-  encoding.py      Position -> canonical planes; board <-> network actions
+  encoding.py      Position -> canonical features/planes (GPU expander);
+                   board <-> network actions
   model.py         ResNet: per-square policy head + win/draw/loss head
-  inference.py     evaluators: network (batched, bf16), uniform, rollouts
+  inference.py     evaluators: network (CUDA graphs or TensorRT),
+                   uniform, rollouts; evaluation cache
   mcts.py          PUCT search with batched leaves, FPU, noise, tree reuse
   players.py       random, alpha-beta, raw policy, MCTS; make_player(spec)
 training/
   config.py        dataclass configs, JSON files, `--set a.b=c` overrides
   self_play.py     N concurrent games, one GPU batch per search step
-  actors.py        self-play in worker processes sharing the GPU
+  actors.py        CPU worker processes + GPU inference server
+                   (self-play and arena games)
   progress.py      console progress bars, memory stats
   fileio.py        atomic, Windows-lock-tolerant file writes
   replay_buffer.py windowed buffer of compact features
@@ -111,9 +114,14 @@ runs/<name>/
   checkers, and the UI can show all three.
 - **Search**: forced moves skip search. Temperature 1 for the opening plies,
   then argmax. Tree reuse between moves.
-- **Self-play parallelism**: many games (128-512) in one process with leaves
-  batched into one forward pass. If Python tree work becomes the bottleneck,
-  add actor processes feeding a shared GPU inference process.
+- **Self-play parallelism**: CPU-only worker processes run the searches
+  (each with a pool of games and pipelined batches); the trainer process
+  holds the only copy of the network on the GPU and serves all workers in
+  combined, dynamically sized batches through shared memory. The arena's
+  games run on the workers too.
+- **Inference**: compact features expanded to planes on the GPU; CUDA
+  graphs or TensorRT, chosen per run by trying both (`backend: auto`);
+  repeated positions answered from a cache inside the search.
 - **Training**: replay window of recent games, training steps set by a
   sample-reuse ratio, loss masked to legal moves, AdamW, bf16 autocast.
 - **Evaluation**: alpha-beta is the fixed yardstick; checkpoints also play
@@ -164,18 +172,56 @@ Each phase ends usable and tested.
 5. **Server + core UI**: API, board, play, analysis overlays.
 6. **Full UI**: watch, editor, dashboard, probe explorer, game browser,
    compare.
-7. ✅ **Performance round 2**: an inference server. CPU-only worker
-   processes run the searches; the trainer process holds the only copy of
-   the network on the GPU and serves every worker's evaluations in combined,
-   dynamically sized batches, with up to two batches queued on the GPU.
-   Positions and outputs pass through shared memory with a state mailbox
-   (Windows pipes are too slow for the hot path). Channels-last tensors
-   (+20-45% GPU throughput) and CPU pinning (server on its own performance
-   core) on top. Dev config: ~40k -> ~150k sims/s at 7 workers. (A first
-   version gave each worker its own GPU copy; on Windows the GPU
-   time-slices between CUDA contexts, so it stopped scaling at 2.)
-   Remaining ideas, if ever needed: send compact features instead of
-   planes and expand them on the GPU, a Cython/numba engine and search.
-   Soak-tested: memory is flat over long runs once the replay buffer has
-   filled (a GPU leak of ~8 MB per CUDA graph capture, from a new stream
-   each time, was found this way and fixed).
+7. ✅ **Performance**, in three rounds. Per 512-game iteration on an
+   i9-12900K + RTX 3070: dev (6x64) ~60 s -> ~20 s, full (10x128)
+   ~290 s -> ~72 s.
+   - *Workers*: a first version gave each worker its own GPU copy; on
+     Windows the GPU time-slices between CUDA contexts, so it stopped
+     scaling at 2 workers.
+   - *Inference server*: CPU-only workers, one GPU process serving them in
+     dynamically sized batches (up to two queued on the GPU), data through
+     shared memory with a state mailbox (Windows pipes are too slow for the
+     hot path), channels-last tensors (+20-45% GPU throughput), CPU pinning
+     (server on its own performance core). Dev: ~40k -> ~150k sims/s.
+   - *Compact inputs*: 40-byte features instead of 2 KB of planes, expanded
+     on the GPU inside the CUDA graph (+~10%).
+   - *TensorRT*: one dynamic-batch fp16 engine, refitted after each
+     training step (~1 s), run in its CUDA-graph mode (which needed the
+     policy readout as a fixed-index gather). 1.6-1.8x for the full
+     network, slower for dev (more CPU per call on a CPU-bound server).
+     `auto` tries both on real iterations and keeps the faster; timing
+     them in isolation picked wrongly both ways.
+   - *Evaluation cache* inside the search: a leaf seen before is expanded
+     at once, no GPU round trip (15-30% hits).
+   - *Arena on the workers*: ~70 s -> ~53 s per evaluation.
+   - Soak-tested: memory is flat over long runs once the replay buffer has
+     filled (a GPU leak of ~8 MB per CUDA graph capture, from a new stream
+     each time, was found this way and fixed).
+
+## Next
+
+1. **Network-size experiment** (decision pending): which size gets
+   strongest for the same training time? Per 512-game iteration with the
+   full config's search: 6x64 ~30 s, 8x96 ~55 s (CUDA graphs; TensorRT
+   untried at this size), 10x128 ~72 s (TensorRT). Plan: train each for an
+   equal wall-clock budget (1-2 h), then play them against each other and
+   alpha-beta depth 6. ~3-6 h of GPU time; best run overnight.
+2. **Phase 5: server + core UI** (FastAPI + React/TypeScript): play,
+   analyse with probability overlays, reading the run directory.
+3. **Phase 6: full UI**: watch, editor, dashboard, probe explorer, game
+   browser, compare.
+
+Smaller items noted along the way:
+- More arena games per evaluation (`arena.games` 40-60): an evaluation is
+  cheap now, and 20 games leave the Elo chain noisy (+-100).
+- Endgame practice: some self-play games starting from random endgames;
+  the first dev run never learned that two kings beat one.
+- If speed matters again: a Cython/numba engine and search (the server's
+  Python loop and the workers' tree code are the remaining limits).
+
+## Results so far
+
+- First dev run (60 iterations, 25 min, before the third performance
+  round): beat alpha-beta depth 6 22-6-2, lost to depth 8 3-1-6 (10
+  games); still improving when it ended. Opening choice converged on
+  11-15, the most popular human opening.

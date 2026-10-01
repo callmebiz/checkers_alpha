@@ -274,3 +274,37 @@ def test_flip_table_is_used_consistently_in_targets():
     mask = legal_mask([pos])[0]
     rotated = {int(FLIP_ACTION[a]) for a in pos.legal_actions()}
     assert set(np.flatnonzero(mask).tolist()) == rotated
+
+
+def test_auto_backend_trial_picks_the_faster(tmp_path, monkeypatch):
+    """'auto' warms up on graphs, tries TensorRT then graphs, and keeps
+    the faster (TensorRT needs a 5% margin)."""
+    trainer = Trainer.new(tiny_config(), tmp_path / 'run')
+    evaluator = trainer.evaluator
+    settled: list[str] = []
+    monkeypatch.setattr(
+        evaluator,
+        'candidates',
+        lambda: [] if settled else ['graphs', 'tensorrt'],
+    )
+    monkeypatch.setattr(
+        evaluator, 'settle', lambda backend, note: settled.append(backend)
+    )
+    assert trainer._try_backend() is None  # warm-up, not measured
+    assert evaluator.backend == 'graphs'
+    assert trainer._try_backend() == 'tensorrt'
+    trainer._trial_result('tensorrt', 81_000.0)
+    assert trainer._try_backend() == 'graphs'
+    trainer._trial_result('graphs', 50_000.0)
+    assert settled == ['tensorrt']
+
+    # a small TensorRT lead isn't enough
+    trainer2 = Trainer.new(tiny_config(), tmp_path / 'run2')
+    monkeypatch.setattr(
+        trainer2.evaluator,
+        'settle',
+        lambda backend, note: settled.append(backend),
+    )
+    trainer2._trial_result('tensorrt', 102_000.0)
+    trainer2._trial_result('graphs', 100_000.0)
+    assert settled[-1] == 'graphs'
