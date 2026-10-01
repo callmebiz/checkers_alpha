@@ -164,15 +164,18 @@ Each phase ends usable and tested.
 5. **Server + core UI**: API, board, play, analysis overlays.
 6. **Full UI**: watch, editor, dashboard, probe explorer, game browser,
    compare.
-7. ✅ **Performance round 2**: self-play worker processes
-   (`training/actors.py`), each with its own network copy and CUDA graphs,
-   sharing the GPU; `self_play.workers` (dev/full default 2). About 2x the
-   games per second of one process. More workers stop helping and then hurt:
-   on Windows the GPU time-slices between processes' CUDA contexts (no MPS),
-   so per-worker batches should stay at 64+. Finer CUDA graph sizes (steps
-   of 32) avoid padding waste. Remaining ideas, if ever needed: a single
-   inference server process fed by CPU-only actors (avoids context
-   switching), a Cython/numba engine and search, an evaluation cache.
+7. ✅ **Performance round 2**: an inference server. CPU-only worker
+   processes run the searches; the trainer process holds the only copy of
+   the network on the GPU and serves every worker's evaluations in combined,
+   dynamically sized batches, with up to two batches queued on the GPU.
+   Positions and outputs pass through shared memory with a state mailbox
+   (Windows pipes are too slow for the hot path). Channels-last tensors
+   (+20-45% GPU throughput) and CPU pinning (server on its own performance
+   core) on top. Dev config: ~40k -> ~150k sims/s at 7 workers. (A first
+   version gave each worker its own GPU copy; on Windows the GPU
+   time-slices between CUDA contexts, so it stopped scaling at 2.)
+   Remaining ideas, if ever needed: send compact features instead of
+   planes and expand them on the GPU, a Cython/numba engine and search.
    Soak-tested: memory is flat over long runs once the replay buffer has
    filled (a GPU leak of ~8 MB per CUDA graph capture, from a new stream
    each time, was found this way and fixed).

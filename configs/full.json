@@ -5,7 +5,7 @@
     "value_hidden": 256
   },
   "self_play": {
-    "workers": 2,
+    "workers": 7,
     "games_per_iteration": 512,
     "concurrent_games": 512,
     "sims": 400,

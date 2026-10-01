@@ -38,8 +38,11 @@ from core.model import ModelConfig
 class SelfPlayConfig:
     games_per_iteration: int = 256
     # Worker processes playing games in parallel (training.actors); 0 plays
-    # in the trainer's own process. Each worker needs ~1.5-2 GB of RAM.
+    # in the trainer's own process. Each worker needs ~0.5 GB of RAM.
     workers: int = 0
+    # Pin the inference server and each worker to its own CPU (see
+    # training.actors.cpu_plan). Helps most on hybrid CPUs.
+    pin_cpus: bool = True
     # Games in progress at once, in total (split evenly between workers).
     # Keep it near games_per_iteration: a much larger pool makes games span
     # several iterations, so their samples come from older networks.

@@ -5,9 +5,9 @@
     "value_hidden": 128
   },
   "self_play": {
-    "workers": 2,
-    "games_per_iteration": 256,
-    "concurrent_games": 256,
+    "workers": 7,
+    "games_per_iteration": 512,
+    "concurrent_games": 512,
     "sims": 200,
     "fast_sims": 50,
     "full_search_prob": 0.25

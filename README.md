@@ -47,7 +47,7 @@ Player specs:
 
 ```sh
 python train.py --config configs/debug.json --run runs/debug   # ~1 min check
-python train.py --config configs/dev.json --run runs/dev       # ~20 s/iter
+python train.py --config configs/dev.json --run runs/dev       # ~30 s/iter
 python train.py --config configs/dev.json --run runs/dev2 --set train.lr=0.001
 python train.py --resume runs/dev              # Ctrl+C saves; this continues
 python train.py --resume runs/dev --iterations 100   # extend a finished run
@@ -57,10 +57,15 @@ Each iteration plays a batch of self-play games (256 at once, spread over
 `self_play.workers` processes sharing the GPU), adds the searched positions
 to a replay buffer, and trains on it.
 
-Tuning workers: 2 is about twice as fast as 1 on an RTX 3070 with 16 cores.
-Beyond 2-3 it gets slower, because the GPU switches between the processes
-rather than running them together, and each worker's batches shrink. Keep
-`concurrent_games / workers` at 128 or more. Each worker needs ~2 GB of RAM.
+How self-play uses the machine: worker processes (`self_play.workers`)
+run the tree searches on CPU cores, and the trainer process serves all their
+network evaluations on the GPU in large combined batches (see
+[training/actors.py](training/actors.py)). On an i9-12900K + RTX 3070 the
+dev config reaches ~150k simulations/s with 7 workers, against ~40k in a
+single process. Past ~7 workers the single server process is the limit, so
+more don't help. Each worker needs ~0.5 GB of RAM. `self_play.pin_cpus`
+(on by default) gives the server a core of its own and puts workers on the
+fast cores first.
 
 In a terminal you get two progress bars: the run (with the latest losses,
 draw rate, speed and Elo) and the current phase (self-play games, training
@@ -106,8 +111,9 @@ python -m training.probes add runs/dev --name kings-corner \
 python -m training.probes list runs/dev
 ```
 
-Configs: `debug` (tiny smoke test), `dev` (6x64 network, ~15-20 s per
-256-game iteration on an RTX 3070), `full` (10x128, long run). Any
+Configs: `debug` (tiny smoke test), `dev` (6x64 network, ~30 s per
+512-game iteration on an RTX 3070), `full` (10x128, ~2.5 min per 512-game
+iteration, ~12 h for 300). Any
 checkpoint can play:
 
 ```sh

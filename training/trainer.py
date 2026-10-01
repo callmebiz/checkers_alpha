@@ -214,11 +214,7 @@ class Trainer:
         try:
             if workers > 0 and self.iteration < cfg.iterations:
                 event(self.log, 'RUN', f'starting {workers} self-play workers')
-                self.actors = ActorPool(
-                    self.config,
-                    workers,
-                    self.store.checkpoints / 'actor_weights.pt',
-                )
+                self.actors = ActorPool(self.config, workers)
             while self.iteration < cfg.iterations:
                 self.run_iteration()
                 done = self.iteration - 1
@@ -266,10 +262,8 @@ class Trainer:
         self.model.eval()
         games = cfg.self_play.games_per_iteration
         if self.actors is not None:
-            # the optimiser step count identifies the weights' version
-            new, saved, sp = self.actors.play(
-                self.model.state_dict(), self.step, games, self._tick
-            )
+            # this process serves the workers' network evaluations
+            new, saved, sp = self.actors.play(self.evaluator, games, self._tick)
         else:
             records, sp = self.self_play.play(games, lambda _: self._tick())
             new = Samples.concat([r.samples for r in records])
@@ -465,6 +459,8 @@ class Trainer:
             return torch.from_numpy(array).to(self.device, non_blocking=True)
 
         x = to(planes(batch.bits, batch.scalars))
+        if self.device.type == 'cuda':
+            x = x.to(memory_format=torch.channels_last)  # matches the model
         target = to(batch.policy.astype(np.float32))
         mask = to(batch.legal_mask())
         wdl = to(batch.wdl.astype(np.int64))

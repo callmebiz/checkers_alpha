@@ -119,10 +119,24 @@ class _NetPending:
         """Wait for the copy from the GPU, then turn logits into priors."""
         if self.ready is not None:
             self.ready.synchronize()  # wait for the copy to host memory
-        out = self.host.numpy()
-        policy, wdl = out[:, :-3], out[:, -3:]
-        priors = legal_softmax(policy, self.positions)
-        return Evaluation(priors, wdl[:, 0] - wdl[:, 2], wdl)
+        return to_evaluation(self.host.numpy(), self.positions)
+
+
+# Tensor layout for GPU inputs (see NetEvaluator.__init__)
+CHANNELS_LAST = torch.channels_last
+
+# Width of the network's combined output: 256 policy logits, then win / draw /
+# loss probabilities
+OUTPUT_SIZE = 256 + 3
+
+
+def to_evaluation(
+    out: npt.NDArray[np.float32], positions: Sequence[Position]
+) -> Evaluation:
+    """Turn raw network output ``(N, OUTPUT_SIZE)`` into an ``Evaluation``."""
+    policy, wdl = out[:, :-3], np.array(out[:, -3:])
+    priors = legal_softmax(policy, positions)
+    return Evaluation(priors, wdl[:, 0] - wdl[:, 2], wdl)
 
 
 _CAPTURE_STREAMS: dict[torch.device, torch.cuda.Stream] = {}
@@ -170,6 +184,12 @@ class NetEvaluator:
         self.model = model.eval()
         self.device = next(model.parameters()).device
         cuda = self.device.type == 'cuda'
+        if cuda:
+            # channels-last layout: 20-45% faster convolutions on the GPU.
+            # Converts the model in place (the trainer shares it; training
+            # benefits too, and the optimiser keeps the same parameters).
+            # (torch's type stubs omit the memory_format keyword of to())
+            model.to(memory_format=torch.channels_last)  # type: ignore
         self.use_amp = use_amp and cuda
         self.use_cuda_graphs = use_cuda_graphs and cuda
         self.max_graph_batch = max_graph_batch
@@ -201,7 +221,7 @@ class NetEvaluator:
         if size not in self._graphs:
             static_in = torch.zeros(
                 (size, NUM_PLANES, 8, 8), device=self.device
-            )
+            ).to(memory_format=torch.channels_last)
             # Warm up on a side stream first, as CUDA graph capture requires.
             # Always the same stream: cuBLAS keeps a workspace (~8 MB) for
             # every stream it has seen and never frees it, so a new stream
@@ -237,7 +257,7 @@ class NetEvaluator:
             graph.replay()
             out = static_out[:n]
         else:
-            out = self._forward(x.to(self.device))
+            out = self._forward(x.to(self.device, memory_format=CHANNELS_LAST))
         host = torch.empty(out.shape, dtype=out.dtype, pin_memory=True)
         # stream-ordered: this copy finishes before the next replay of the
         # same graph can overwrite static_out
@@ -249,6 +269,71 @@ class NetEvaluator:
     def evaluate(self, positions: Sequence[Position]) -> Evaluation:
         """Evaluate ``positions`` and wait for the result."""
         return self.submit(positions).result()
+
+    @torch.no_grad()
+    def submit_planes(self, x: npt.NDArray[np.float32]) -> RawPending:
+        """Queue the network on already-encoded planes; return at once.
+
+        Used by the self-play inference server (``training.actors``), whose
+        workers encode positions themselves. The input goes through pinned
+        memory so that neither copy makes the CPU wait for the GPU: the
+        server can prepare the next batch while this one runs. Batches
+        larger than ``max_graph_batch`` are run in chunks.
+        """
+        if not self.use_cuda_graphs:
+            x_dev = torch.from_numpy(x).to(self.device)
+            out = self._forward(x_dev.to(memory_format=CHANNELS_LAST))
+            return RawPending(out.cpu(), None)
+        staged = torch.empty(x.shape, dtype=torch.float32, pin_memory=True)
+        staged.numpy()[:] = x
+        host = torch.empty(
+            (len(x), OUTPUT_SIZE), dtype=torch.float32, pin_memory=True
+        )
+        for start in range(0, len(x), self.max_graph_batch):
+            n = min(self.max_graph_batch, len(x) - start)
+            graph, static_in, static_out = self._graph(graph_batch_size(n))
+            # all stream-ordered: a later batch can't overwrite these
+            # buffers before this batch's copies have finished
+            static_in[:n].copy_(staged[start : start + n], non_blocking=True)
+            graph.replay()
+            host[start : start + n].copy_(static_out[:n], non_blocking=True)
+        ready = torch.cuda.Event()
+        ready.record()
+        # keep the staged input alive until the copies from it are done
+        return RawPending(host, ready, staged)
+
+    def forward_planes(
+        self, x: npt.NDArray[np.float32]
+    ) -> npt.NDArray[np.float32]:
+        """Raw output ``(N, OUTPUT_SIZE)`` for encoded planes; waits."""
+        return self.submit_planes(x).result()
+
+
+class RawPending:
+    """Raw network output on its way from the GPU (see ``submit_planes``)."""
+
+    def __init__(
+        self,
+        host: torch.Tensor,
+        ready: torch.cuda.Event | None,
+        keep: torch.Tensor | None = None,
+    ) -> None:
+        """Hold the output buffer, its ready event, and any buffer the GPU
+        still reads from (``keep``)."""
+        self.host = host
+        self.ready = ready
+        self.keep = keep
+
+    def done(self) -> bool:
+        """Whether the output has arrived (never waits)."""
+        return self.ready is None or self.ready.query()
+
+    def result(self) -> npt.NDArray[np.float32]:
+        """Wait for the output, then return it as ``(N, OUTPUT_SIZE)``."""
+        if self.ready is not None:
+            self.ready.synchronize()
+        self.keep = None
+        return self.host.numpy()
 
 
 class UniformEvaluator:

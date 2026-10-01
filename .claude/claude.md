@@ -71,9 +71,16 @@ for playing, watching, analysing and following training.
   (plain lists, no numpy), `Position._generate/play`, `NetEvaluator.submit`
   (CUDA graphs, pinned async copy). Profile before and after changing them.
 - Self-play workers (`training/actors.py`) are spawned processes: anything
-  they need must be picklable and importable at module level. Worker tests
-  are marked `slow`. Benchmarks on this machine are noisy (other programs
-  use the GPU); compare configurations over several iterations.
+  they need must be picklable and importable at module level, and scripts
+  that start them must be files (not stdin). Workers are CPU-only; the
+  trainer process is the GPU inference server. Hot-path data goes through
+  shared memory and the mailbox states, never pipes. Worker tests are
+  marked `slow`.
+- Benchmarks: compare sims/s, not games/s (games carry over between
+  iterations, which skews short runs). Close other GPU programs first, and
+  never benchmark while a user's training run is going.
+- The machine is an i9-12900K (8 hyperthreaded P-cores = CPUs 0-15, 8
+  E-cores = 16-23) with an RTX 3070 (8 GB), 32 GB RAM.
 
 ## Working agreements
 

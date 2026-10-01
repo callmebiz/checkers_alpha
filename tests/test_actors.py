@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from core.inference import graph_batch_size
+from core.inference import NetEvaluator, graph_batch_size
 from core.model import CheckersNet
 from training.actors import ActorPool
 from training.config import RunConfig
@@ -70,13 +70,39 @@ def test_training_with_worker_processes(tmp_path):
 def test_dead_worker_is_reported_not_waited_on(tmp_path):
     """A killed worker raises an error instead of hanging the trainer."""
     config = actor_config(workers=1)
-    pool = ActorPool(config, 1, tmp_path / 'weights.pt')
+    pool = ActorPool(config, 1)
     try:
         pool.processes[0].terminate()
         pool.processes[0].join()
-        state = CheckersNet(config.model).state_dict()
-        with pytest.raises(RuntimeError, match='actor-0'):
-            pool.play(state, 0, 4)
+        evaluator = NetEvaluator(CheckersNet(config.model))
+        with pytest.raises(RuntimeError, match='worker-0'):
+            pool.play(evaluator, 4)
     finally:
         pool.close()
     assert not any(p.is_alive() for p in pool.processes)
+
+
+@pytest.mark.parametrize(
+    'logical, physical, workers, expected',
+    [
+        # hybrid i9-12900K: 8 hyperthreaded P-cores (0-15), 8 E-cores (16-23)
+        (24, 16, 4, (0, [2, 4, 6, 8])),
+        (24, 16, 9, (0, [2, 4, 6, 8, 10, 12, 14, 16, 17])),
+        # ordinary 8-core CPU with hyperthreading: second threads come last
+        (16, 8, 8, (0, [2, 4, 6, 8, 10, 12, 14, 3])),
+        # no hyperthreading
+        (4, 4, 5, (0, [1, 2, 3, 1, 2])),
+    ],
+)
+def test_cpu_plan(monkeypatch, logical, physical, workers, expected):
+    """The server gets its own core; workers fill fast cores first."""
+    import training.actors as actors
+
+    def cpu_count(logical_cpus: bool = True) -> int:
+        """Fake core counts for this case."""
+        return logical if logical_cpus else physical
+
+    monkeypatch.setattr(
+        actors.psutil, 'cpu_count', lambda logical=True: cpu_count(logical)
+    )
+    assert actors.cpu_plan(workers) == expected
