@@ -9,6 +9,8 @@ Examples:
       --set train.lr=0.001 --set self_play.sims=400
   # continue a stopped run (Ctrl+C saves a checkpoint)
   python train.py --resume runs/dev
+  # ... with changed settings (not the network's shape)
+  python train.py --resume runs/dev --set train.lr=0.0005
   # continue past the planned end
   python train.py --resume runs/dev --iterations 200
 
@@ -20,9 +22,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
-from training.config import RunConfig, apply_overrides
+from training.config import RunConfig, apply_overrides, changed_config
+from training.fileio import append_jsonl
+from training.logs import event
+from training.run_store import RunStore
 from training.trainer import Trainer
 
 
@@ -54,9 +60,24 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.resume:
-        if args.config or args.run or args.set:
-            parser.error('--resume takes only --iterations and --progress')
+        if args.config or args.run:
+            parser.error('--resume takes --set, --iterations and --progress')
+        changes = []
+        if args.set:
+            store = RunStore.open(args.resume)
+            try:
+                config, changes = changed_config(store.load_config(), args.set)
+            except ValueError as error:
+                parser.error(str(error))
+            config.save(store.config_path)
+            if changes:
+                append_jsonl(
+                    store.root / 'config_changes.jsonl',
+                    {'time': time.time(), 'changes': changes},
+                )
         trainer = Trainer.resume(args.resume)
+        if changes:
+            event(trainer.log, 'RUN', 'config changed: ' + '; '.join(changes))
         if args.iterations:
             trainer.config.train.iterations = args.iterations
             trainer.config.save(trainer.store.config_path)

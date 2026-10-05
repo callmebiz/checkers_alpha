@@ -15,7 +15,10 @@ target-version = "py313"
 select = ["E", "F", "W", "I", "UP", "B"]
 
 [tool.pyright]
-include = ["core", "training", "tests", "play.py", "train.py"]
+include = [
+  "core", "training", "experiments", "server", "tests",
+  "play.py", "train.py", "serve.py",
+]
 pythonVersion = "3.13"
 typeCheckingMode = "standard"
 

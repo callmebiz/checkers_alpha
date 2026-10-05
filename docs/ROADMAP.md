@@ -169,7 +169,21 @@ Each phase ends usable and tested.
    positions evaluated every iteration (raw prior + search), editable
    mid-run, back-fill over old checkpoints, `python -m training.probes`
    CLI. An evaluation costs ~100 s on the GPU.
-5. **Server + core UI**: API, board, play, analysis overlays.
+5. ✅ **Server + core UI**: FastAPI server (stateless: the UI sends the
+   start FEN plus hops, so draw-rule history survives; models from any
+   run, LRU-loaded on the GPU; live analysis streamed over a WebSocket at
+   ~10k sims/s). React/TypeScript board: click-to-move with multi-jumps,
+   person / network / alpha-beta per side, computer-vs-computer with
+   pause, prior-or-visits arrows, WDL bar, move table with each move's
+   expected line (hover to draw it), undo/redo, record navigation, flip,
+   FEN copy/load. Tested with pytest (server) and Vitest (UI logic).
+   Then: chess-style playback controls (computer games wait for play,
+   forward steps one move), faint square numbers, an evaluation graph
+   (stacked win/draw/loss over the game), and game review: the
+   strongest checkpoint judges every turn by expected score given away
+   (categories and accuracy as in the chess analyzer, plus "forced"; no
+   book or brilliant). Calibration on 6 alpha-beta 6 vs 2 games:
+   accuracy 95.3 vs 93.4, more errors for the weaker side.
 6. **Full UI**: watch, editor, dashboard, probe explorer, game browser,
    compare.
 7. ✅ **Performance**, in three rounds. Per 512-game iteration on an
@@ -200,15 +214,21 @@ Each phase ends usable and tested.
 
 ## Next
 
-1. **Network-size experiment** (decision pending): which size gets
-   strongest for the same training time? Per 512-game iteration with the
-   full config's search: 6x64 ~30 s, 8x96 ~55 s (CUDA graphs; TensorRT
-   untried at this size), 10x128 ~72 s (TensorRT). Plan: train each for an
-   equal wall-clock budget (1-2 h), then play them against each other and
-   alpha-beta depth 6. ~3-6 h of GPU time; best run overnight.
-2. **Phase 5: server + core UI** (FastAPI + React/TypeScript): play,
-   analyse with probability overlays, reading the run directory.
-3. **Phase 6: full UI**: watch, editor, dashboard, probe explorer, game
+0. **Long run** (`experiments/long_run.py`, `train.bat`): the 10x128
+   network continued from the size study for days, on and off, with an
+   open-ended step learning-rate schedule and gauntlets on a fixed scale,
+   plus skill suites (`training/suites.py`: solved endgames, verified
+   tactics) scored at every gauntlet.
+
+1. ✅ **Network-size experiment** (`experiments/size_study.py`, results
+   below):
+   which size gets strongest for the same training time? 10x128, 8x96 and
+   6x64 each train 4.25 h with the full config's search (learning rate
+   annealed over the hours), evaluated every ~15 min against alpha-beta 4
+   and 6. Then a tournament on one Elo scale: final networks, checkpoints
+   at 1/4, 1/2, 3/4 of training, raw networks (no search) and alpha-beta
+   2-8, 60 games per pairing. Results in `runs/size_study/REPORT.md`.
+2. **Phase 6: full UI**: watch, editor, dashboard, probe explorer, game
    browser, compare.
 
 Smaller items noted along the way:
@@ -225,3 +245,13 @@ Smaller items noted along the way:
   round): beat alpha-beta depth 6 22-6-2, lost to depth 8 3-1-6 (10
   games); still improving when it ended. Opening choice converged on
   11-15, the most popular human opening.
+- Network-size study (2026-10-01, `runs/size_study/REPORT.md`): 10x128,
+  8x96 and 6x64 trained 4.25 h each with the full config. All three end
+  level on one Elo scale (779 / 788 / 791 with alpha-beta 4 = 0, 90%
+  intervals +-50; ~50% head to head, a third of games drawn), all ~350
+  Elo above alpha-beta depth 8. 6x64 leads at 1-3 h (more games: 166k vs
+  110k), 10x128 catches up by the end and has the best value head
+  (accuracy 0.81 vs 0.79), so it may pull ahead with longer training.
+  Search (200 sims) is worth ~+550 Elo; the raw policy alone is about
+  alpha-beta depth 6. No restarts; memory flat apart from the known
+  TensorRT refit leak (~45 MB/h).

@@ -18,6 +18,10 @@ dependencies:
       - psutil
       - fastapi
       - uvicorn
+      - websockets  # live analysis over WebSocket
+      - httpx  # FastAPI test client
+      - playwright  # optional: browser checks of the UI (uses installed Edge)
+      - matplotlib  # experiment reports
       - pytest
       - ruff
       - pyright

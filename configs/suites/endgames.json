@@ -1,0 +1,3506 @@
+{
+ "built": "2026-10-02 13:57",
+ "max_turns": 60,
+ "solved": {
+  "positions": 5724904,
+  "classes": 25
+ },
+ "judgement": [
+  {
+   "fen": "B:W5,K13:BK28",
+   "value": -1,
+   "dtw": 34,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W25,K29:B4",
+   "value": -1,
+   "dtw": 44,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK16:BK23,27",
+   "value": -1,
+   "dtw": 8,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W32:B2,K24",
+   "value": -1,
+   "dtw": 4,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W28:B14,21",
+   "value": -1,
+   "dtw": 42,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK15,22:BK21",
+   "value": -1,
+   "dtw": 14,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W13:BK2,K31",
+   "value": -1,
+   "dtw": 24,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK13:B7,12",
+   "value": -1,
+   "dtw": 52,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK15:B26,28",
+   "value": -1,
+   "dtw": 38,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W15:BK17,18",
+   "value": -1,
+   "dtw": 24,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W15,25:B27",
+   "value": -1,
+   "dtw": 48,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W30:BK6,24",
+   "value": -1,
+   "dtw": 8,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W25:BK11,15",
+   "value": -1,
+   "dtw": 8,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK25:BK21,23",
+   "value": -1,
+   "dtw": 18,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK32:B1,6",
+   "value": -1,
+   "dtw": 36,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK5:B6,K29",
+   "value": -1,
+   "dtw": 46,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W19:BK9,K30",
+   "value": -1,
+   "dtw": 10,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK13,K25:BK2",
+   "value": -1,
+   "dtw": 24,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK24:B15,26",
+   "value": -1,
+   "dtw": 40,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W27,K28:BK12",
+   "value": -1,
+   "dtw": 10,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK14,31:BK24",
+   "value": -1,
+   "dtw": 42,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK1,K12:B16",
+   "value": -1,
+   "dtw": 22,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK17,30:BK19",
+   "value": -1,
+   "dtw": 40,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK25:B9,K28",
+   "value": -1,
+   "dtw": 14,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK3,K30:BK8",
+   "value": -1,
+   "dtw": 14,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W32:B24,28",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK31:B21,K29",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W7:B6,10",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W18,22:BK29",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W19,20:BK14",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK15:B3,K12",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W24,28:BK19",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK12:BK8,K16",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK18:BK15,K22",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK31:BK26,K27",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK23:BK18,27",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK19:B15,24",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK7,14:BK10",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK16:BK4,K12",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W25,K29:BK13",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK12:B8,11",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK13:B6,9",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W22,26:BK25",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W15,18:BK25",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK11:BK8,15",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W17,K25:BK21",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK25:B17,26",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK9:B10,17",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W19,23:BK27",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK9,K18:BK17",
+   "value": 0,
+   "dtw": -1,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W15,K24:B22",
+   "value": 1,
+   "dtw": 11,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W22,K32:B20",
+   "value": 1,
+   "dtw": 3,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK24:B13,K32",
+   "value": 1,
+   "dtw": 37,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK13:B1,K20",
+   "value": 1,
+   "dtw": 11,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK17,31:BK15",
+   "value": 1,
+   "dtw": 9,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W5,27:B11",
+   "value": 1,
+   "dtw": 7,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK15:B1,8",
+   "value": 1,
+   "dtw": 43,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W31:B17,K27",
+   "value": 1,
+   "dtw": 3,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK10:B25,K29",
+   "value": 1,
+   "dtw": 31,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK16,26:BK25",
+   "value": 1,
+   "dtw": 13,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK13:B2,K21",
+   "value": 1,
+   "dtw": 3,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK18:BK9,28",
+   "value": 1,
+   "dtw": 11,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK29:B6,27",
+   "value": 1,
+   "dtw": 7,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK21:BK18,23",
+   "value": 1,
+   "dtw": 3,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W13,23:B10",
+   "value": 1,
+   "dtw": 3,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W14:B6,K26",
+   "value": 1,
+   "dtw": 3,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W10:BK17,K32",
+   "value": 1,
+   "dtw": 19,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W17,25:B28",
+   "value": 1,
+   "dtw": 49,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W30:BK12,21",
+   "value": 1,
+   "dtw": 11,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK17:B19,K26",
+   "value": 1,
+   "dtw": 37,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W20:B2,K17",
+   "value": 1,
+   "dtw": 11,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W10:B4,K12",
+   "value": 1,
+   "dtw": 45,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:WK12,K24:BK17",
+   "value": 1,
+   "dtw": 31,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W28:BK20,25",
+   "value": 1,
+   "dtw": 3,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK15:BK27,K32",
+   "value": 1,
+   "dtw": 31,
+   "group": "three pieces"
+  },
+  {
+   "fen": "W:W20,28:BK10,K11",
+   "value": -1,
+   "dtw": 6,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W18,K30:BK17,K31",
+   "value": -1,
+   "dtw": 34,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK3,27:B6,19",
+   "value": -1,
+   "dtw": 52,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W20,22:BK6,K10",
+   "value": -1,
+   "dtw": 12,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK20,K30:B8,9",
+   "value": -1,
+   "dtw": 18,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK2,K26:B17,18",
+   "value": -1,
+   "dtw": 36,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W23,27:BK12,K20",
+   "value": -1,
+   "dtw": 52,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W5,K11:B1,10",
+   "value": -1,
+   "dtw": 38,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK5,K22:BK17,26",
+   "value": -1,
+   "dtw": 36,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W19,26:BK9,K11",
+   "value": -1,
+   "dtw": 8,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK29,K32:B12,18",
+   "value": -1,
+   "dtw": 40,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK1,K31:B16,25",
+   "value": -1,
+   "dtw": 58,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK10,19:B11,18",
+   "value": -1,
+   "dtw": 40,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W6,K20:B12,K22",
+   "value": -1,
+   "dtw": 42,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK21,30:B22,27",
+   "value": -1,
+   "dtw": 34,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK19,K29:B5,8",
+   "value": -1,
+   "dtw": 22,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W20,25:B9,K28",
+   "value": -1,
+   "dtw": 14,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK6,20:B12,17",
+   "value": -1,
+   "dtw": 34,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W12,K27:B3,20",
+   "value": -1,
+   "dtw": 32,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W10,K21:B1,5",
+   "value": -1,
+   "dtw": 42,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK14,K32:B5,8",
+   "value": -1,
+   "dtw": 10,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK7,K24:B8,17",
+   "value": -1,
+   "dtw": 32,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK1,K26:B11,K25",
+   "value": -1,
+   "dtw": 40,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W13,20:B5,K26",
+   "value": -1,
+   "dtw": 12,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK15,30:BK4,25",
+   "value": -1,
+   "dtw": 6,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W14,K31:BK2,K6",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W6,K31:BK5,K12",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK7,K12:B1,K32",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK3,32:B14,27",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK13,K18:B22,26",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK26,29:B24,K32",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W6,29:BK5,12",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W6,K9:BK24,28",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W10,K21:B12,K28",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK1,K11:B14,K21",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK20,K25:BK12,28",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W7,13:B4,28",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W20,K26:BK9,28",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK11,15:BK1,26",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W6,24:B7,K30",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W16,19:B2,K32",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK3,14:B21,K31",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W13,16:BK1,24",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK28,32:B17,25",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK3,27:BK5,K13",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK2,5:BK3,4",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK21,24:B7,K11",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W5,K16:B24,K31",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W7,K12:BK20,K28",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK4,23:BK16,22",
+   "value": 0,
+   "dtw": -1,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK2,K30:B11,28",
+   "value": 1,
+   "dtw": 41,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK16,K17:B20,25",
+   "value": 1,
+   "dtw": 7,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W9,K32:B5,16",
+   "value": 1,
+   "dtw": 31,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W31,32:B13,K30",
+   "value": 1,
+   "dtw": 55,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK22,K32:B5,K12",
+   "value": 1,
+   "dtw": 17,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W21,31:B1,K32",
+   "value": 1,
+   "dtw": 57,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W7,20:BK9,K27",
+   "value": 1,
+   "dtw": 51,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W15,K28:BK7,23",
+   "value": 1,
+   "dtw": 15,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W17,K19:B13,26",
+   "value": 1,
+   "dtw": 5,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W9,K11:B1,10",
+   "value": 1,
+   "dtw": 39,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W21,26:B6,K17",
+   "value": 1,
+   "dtw": 41,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W22,K25:BK11,K18",
+   "value": 1,
+   "dtw": 43,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK4,K32:B6,15",
+   "value": 1,
+   "dtw": 21,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK14,K27:B6,K30",
+   "value": 1,
+   "dtw": 9,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W26,32:BK4,10",
+   "value": 1,
+   "dtw": 47,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W6,K18:B7,K26",
+   "value": 1,
+   "dtw": 37,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK4,28:BK22,K27",
+   "value": 1,
+   "dtw": 13,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W12,21:BK11,K22",
+   "value": 1,
+   "dtw": 17,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W10,K29:B2,17",
+   "value": 1,
+   "dtw": 5,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:W11,K32:B20,28",
+   "value": 1,
+   "dtw": 29,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK4,28:B18,K24",
+   "value": 1,
+   "dtw": 49,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W16,17:BK5,K15",
+   "value": 1,
+   "dtw": 9,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W13,31:B1,K17",
+   "value": 1,
+   "dtw": 19,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:W8,K26:BK2,K27",
+   "value": 1,
+   "dtw": 13,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK7,30:BK19,K23",
+   "value": 1,
+   "dtw": 11,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK2,K4:BK1,K3",
+   "value": -1,
+   "dtw": 8,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK8,K29:BK10,K19",
+   "value": -1,
+   "dtw": 14,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK8,K21:BK13,K15",
+   "value": -1,
+   "dtw": 10,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK11,K20:BK12,K25",
+   "value": -1,
+   "dtw": 36,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK4,K29:BK27,K30",
+   "value": -1,
+   "dtw": 12,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK8,K12:BK3,K15",
+   "value": -1,
+   "dtw": 38,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK11,K21:BK14,K19",
+   "value": -1,
+   "dtw": 12,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK4,K22:BK21,K30",
+   "value": -1,
+   "dtw": 34,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK6,K28:BK4,K29",
+   "value": -1,
+   "dtw": 20,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK11,K13:BK5,K19",
+   "value": -1,
+   "dtw": 16,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK11,K16:BK3,K29",
+   "value": -1,
+   "dtw": 12,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK19,K26:BK14,K23",
+   "value": -1,
+   "dtw": 28,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK10,K19:BK2,K20",
+   "value": -1,
+   "dtw": 4,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK2,K23:BK19,K26",
+   "value": -1,
+   "dtw": 30,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK11,K19:BK12,K25",
+   "value": -1,
+   "dtw": 10,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK3,K10:BK6,K15",
+   "value": -1,
+   "dtw": 36,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK18,K24:BK16,K17",
+   "value": -1,
+   "dtw": 12,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK8,K31:BK19,K28",
+   "value": -1,
+   "dtw": 36,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK8,K29:BK15,K16",
+   "value": -1,
+   "dtw": 10,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK7,K15:BK8,K22",
+   "value": -1,
+   "dtw": 10,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK12,K19:BK4,K20",
+   "value": -1,
+   "dtw": 48,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK8,K13:BK1,K10",
+   "value": -1,
+   "dtw": 36,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK12,K29:BK7,K20",
+   "value": -1,
+   "dtw": 16,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK16,K29:BK15,K31",
+   "value": -1,
+   "dtw": 10,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK9,K22:BK13,K17",
+   "value": -1,
+   "dtw": 30,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK9,K22:BK30,K32",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK10,K25:BK20,K32",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK7,K18:BK4,K21",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK10,K28:BK25,K31",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK28,K32:BK7,K17",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK1,K9:BK19,K29",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK6,K26:BK4,K18",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK5,K29:BK21,K31",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK17,K29:BK10,K12",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK29,K32:BK3,K7",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK29,K32:BK16,K19",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK3,K8:BK5,K15",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK20,K30:BK4,K21",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK18,K19:BK10,K28",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK9,K13:BK22,K23",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK8,K13:BK15,K30",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK4,K28:BK14,K26",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK7,K22:BK5,K6",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK7,K20:BK23,K25",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK2,K27:BK6,K19",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK11,K28:BK13,K30",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK7,K25:BK1,K12",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK10,K14:BK3,K26",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK3,K24:BK14,K25",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK20,K32:BK2,K28",
+   "value": 0,
+   "dtw": -1,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK10,K18:BK2,K13",
+   "value": 1,
+   "dtw": 5,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK4,K31:BK18,K25",
+   "value": 1,
+   "dtw": 13,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK2,K22:BK7,K15",
+   "value": 1,
+   "dtw": 9,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK27,K32:BK12,K31",
+   "value": 1,
+   "dtw": 9,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK6,K23:BK7,K17",
+   "value": 1,
+   "dtw": 13,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK12,K22:BK23,K24",
+   "value": 1,
+   "dtw": 13,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK8,K17:BK16,K23",
+   "value": 1,
+   "dtw": 9,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK28,K32:BK23,K31",
+   "value": 1,
+   "dtw": 15,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK8,K31:BK1,K23",
+   "value": 1,
+   "dtw": 11,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK8,K22:BK1,K23",
+   "value": 1,
+   "dtw": 15,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK1,K18:BK10,K17",
+   "value": 1,
+   "dtw": 35,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK2,K29:BK9,K17",
+   "value": 1,
+   "dtw": 13,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK21,K29:BK6,K26",
+   "value": 1,
+   "dtw": 45,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK2,K30:BK14,K16",
+   "value": 1,
+   "dtw": 13,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK11,K22:BK6,K14",
+   "value": 1,
+   "dtw": 13,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK26,K32:BK8,K29",
+   "value": 1,
+   "dtw": 19,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK4,K17:BK6,K26",
+   "value": 1,
+   "dtw": 15,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK2,K18:BK21,K30",
+   "value": 1,
+   "dtw": 35,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK2,K8:BK3,K16",
+   "value": 1,
+   "dtw": 5,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK13,K20:BK9,K28",
+   "value": 1,
+   "dtw": 13,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK4,K25:BK24,K26",
+   "value": 1,
+   "dtw": 11,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK3,K22:BK9,K11",
+   "value": 1,
+   "dtw": 9,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK12,K22:BK11,K27",
+   "value": 1,
+   "dtw": 9,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK15,K20:BK12,K25",
+   "value": 1,
+   "dtw": 11,
+   "group": "two kings each"
+  },
+  {
+   "fen": "B:WK4,K26:BK17,K24",
+   "value": 1,
+   "dtw": 15,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:WK25:BK26",
+   "value": -1,
+   "dtw": 4,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK16:BK24",
+   "value": -1,
+   "dtw": 8,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK28:B12",
+   "value": -1,
+   "dtw": 6,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK23:B5",
+   "value": -1,
+   "dtw": 6,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK30:BK31",
+   "value": -1,
+   "dtw": 6,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W25:BK27",
+   "value": -1,
+   "dtw": 8,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK32:B16",
+   "value": -1,
+   "dtw": 4,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W13:BK14",
+   "value": -1,
+   "dtw": 2,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK17:B1",
+   "value": -1,
+   "dtw": 4,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK16:B13",
+   "value": -1,
+   "dtw": 10,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W28:BK2",
+   "value": -1,
+   "dtw": 6,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK11:B25",
+   "value": -1,
+   "dtw": 8,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W12:B4",
+   "value": -1,
+   "dtw": 2,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK18:BK11",
+   "value": -1,
+   "dtw": 6,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK6:B8",
+   "value": -1,
+   "dtw": 8,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W8:BK22",
+   "value": -1,
+   "dtw": 8,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK29:BK5",
+   "value": -1,
+   "dtw": 10,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK15:BK30",
+   "value": -1,
+   "dtw": 6,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK5:B21",
+   "value": -1,
+   "dtw": 10,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK12:BK27",
+   "value": -1,
+   "dtw": 10,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK6:BK8",
+   "value": -1,
+   "dtw": 8,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK6:B21",
+   "value": -1,
+   "dtw": 10,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK30:B7",
+   "value": -1,
+   "dtw": 8,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK15:BK8",
+   "value": -1,
+   "dtw": 4,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK2:B1",
+   "value": -1,
+   "dtw": 4,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W29:BK8",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W17:B12",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK3:BK5",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK6:BK27",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W26:B20",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W22:BK16",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W14:B18",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK22:BK28",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W9:BK1",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W14:BK8",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK7:B22",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W5:BK29",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK12:B28",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W13:B21",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK19:B26",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK24:BK16",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK23:B20",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK30:B3",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W21:BK8",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK4:B13",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W6:BK5",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W8:BK27",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W19:B8",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W31:B14",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK32:B26",
+   "value": 0,
+   "dtw": -1,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK18:BK30",
+   "value": 1,
+   "dtw": 3,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W25:BK16",
+   "value": 1,
+   "dtw": 9,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK29:BK19",
+   "value": 1,
+   "dtw": 7,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W13:BK2",
+   "value": 1,
+   "dtw": 3,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W11:BK23",
+   "value": 1,
+   "dtw": 7,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W32:BK17",
+   "value": 1,
+   "dtw": 9,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W19:BK13",
+   "value": 1,
+   "dtw": 11,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK1:BK13",
+   "value": 1,
+   "dtw": 11,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W20:BK24",
+   "value": 1,
+   "dtw": 3,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK1:B21",
+   "value": 1,
+   "dtw": 11,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W11:BK24",
+   "value": 1,
+   "dtw": 7,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK18:BK29",
+   "value": 1,
+   "dtw": 3,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK19:B22",
+   "value": 1,
+   "dtw": 7,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK22:BK10",
+   "value": 1,
+   "dtw": 7,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W6:B1",
+   "value": 1,
+   "dtw": 5,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK11:BK23",
+   "value": 1,
+   "dtw": 7,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK13:BK25",
+   "value": 1,
+   "dtw": 5,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK5:BK2",
+   "value": 1,
+   "dtw": 11,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W30:B18",
+   "value": 1,
+   "dtw": 3,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:WK21:BK10",
+   "value": 1,
+   "dtw": 7,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:W16:B3",
+   "value": 1,
+   "dtw": 3,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W25:BK14",
+   "value": 1,
+   "dtw": 5,
+   "group": "two pieces"
+  },
+  {
+   "fen": "W:WK10:B5",
+   "value": 1,
+   "dtw": 3,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W16:BK2",
+   "value": 1,
+   "dtw": 5,
+   "group": "two pieces"
+  },
+  {
+   "fen": "B:W15:BK9",
+   "value": 1,
+   "dtw": 9,
+   "group": "two pieces"
+  }
+ ],
+ "the_move": [
+  {
+   "black_to_move": "B:WK27:B5",
+   "white_to_move": "W:WK27:B5",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W32:B16",
+   "white_to_move": "W:W32:B16",
+   "black_result": [
+    -1,
+    1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK19:B20",
+   "white_to_move": "W:WK19:B20",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK31:BK25",
+   "white_to_move": "W:WK31:BK25",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK18:BK4",
+   "white_to_move": "W:WK18:BK4",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W20:BK13",
+   "white_to_move": "W:W20:BK13",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK14:BK22",
+   "white_to_move": "W:WK14:BK22",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK12:B7",
+   "white_to_move": "W:WK12:B7",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK32:B21",
+   "white_to_move": "W:WK32:B21",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK9:B8",
+   "white_to_move": "W:WK9:B8",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W29:B22",
+   "white_to_move": "W:W29:B22",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK13:B5",
+   "white_to_move": "W:WK13:B5",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK14:BK30",
+   "white_to_move": "W:WK14:BK30",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK30:BK15",
+   "white_to_move": "W:WK30:BK15",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK7:B13",
+   "white_to_move": "W:WK7:B13",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK27:B28",
+   "white_to_move": "W:WK27:B28",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W20:BK5",
+   "white_to_move": "W:W20:BK5",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK25:B6",
+   "white_to_move": "W:WK25:B6",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W26:B6",
+   "white_to_move": "W:W26:B6",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK27:B7",
+   "white_to_move": "W:WK27:B7",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W6:B3",
+   "white_to_move": "W:W6:B3",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK9:BK30",
+   "white_to_move": "W:WK9:BK30",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK32:B7",
+   "white_to_move": "W:WK32:B7",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W24:BK6",
+   "white_to_move": "W:W24:BK6",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK15:B7",
+   "white_to_move": "W:WK15:B7",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W6:BK4",
+   "white_to_move": "W:W6:BK4",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK8:BK19",
+   "white_to_move": "W:WK8:BK19",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK26:BK14",
+   "white_to_move": "W:WK26:BK14",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W32:B15",
+   "white_to_move": "W:W32:B15",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W25:BK3",
+   "white_to_move": "W:W25:BK3",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK3:BK14",
+   "white_to_move": "W:WK3:BK14",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W12:BK24",
+   "white_to_move": "W:W12:BK24",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK26:BK24",
+   "white_to_move": "W:WK26:BK24",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK17:BK15",
+   "white_to_move": "W:WK17:BK15",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK26:B21",
+   "white_to_move": "W:WK26:B21",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:WK29:BK8",
+   "white_to_move": "W:WK29:BK8",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W20:B8",
+   "white_to_move": "W:W20:B8",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two pieces"
+  },
+  {
+   "black_to_move": "B:W27,28:BK19",
+   "white_to_move": "W:W27,28:BK19",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK11:B3,12",
+   "white_to_move": "W:WK11:B3,12",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK9:B10,17",
+   "white_to_move": "W:WK9:B10,17",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK4,12:BK19",
+   "white_to_move": "W:WK4,12:BK19",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK17:B18,K25",
+   "white_to_move": "W:WK17:B18,K25",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK23:B15,K22",
+   "white_to_move": "W:WK23:B15,K22",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK13,22:BK10",
+   "white_to_move": "W:WK13,22:BK10",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK15:BK16,K23",
+   "white_to_move": "W:WK15:BK16,K23",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W23,24:BK16",
+   "white_to_move": "W:W23,24:BK16",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W24,27:BK12",
+   "white_to_move": "W:W24,27:BK12",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK18:B10,K19",
+   "white_to_move": "W:WK18:B10,K19",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK24:B12,16",
+   "white_to_move": "W:WK24:B12,16",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK4,8:BK2",
+   "white_to_move": "W:WK4,8:BK2",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W25,29:BK14",
+   "white_to_move": "W:W25,29:BK14",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK11:B19,24",
+   "white_to_move": "W:WK11:B19,24",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W24,27:BK16",
+   "white_to_move": "W:W24,27:BK16",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK25,29:BK17",
+   "white_to_move": "W:WK25,29:BK17",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W8,12:BK10",
+   "white_to_move": "W:W8,12:BK10",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W10,17:BK9",
+   "white_to_move": "W:W10,17:BK9",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK1,5:BK2",
+   "white_to_move": "W:WK1,5:BK2",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK4,K12:BK11",
+   "white_to_move": "W:WK4,K12:BK11",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W21,30:BK25",
+   "white_to_move": "W:W21,30:BK25",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK7:B14,18",
+   "white_to_move": "W:WK7:B14,18",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK14:B15,23",
+   "white_to_move": "W:WK14:B15,23",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK10:B17,18",
+   "white_to_move": "W:WK10:B17,18",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK7:B8,15",
+   "white_to_move": "W:WK7:B8,15",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W17,18:BK9",
+   "white_to_move": "W:W17,18:BK9",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W14,18:BK26",
+   "white_to_move": "W:W14,18:BK26",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W8:B7,15",
+   "white_to_move": "W:W8:B7,15",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK10,K19:BK11",
+   "white_to_move": "W:WK10,K19:BK11",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK21,K29:BK26",
+   "white_to_move": "W:WK21,K29:BK26",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK4,8:BK10",
+   "white_to_move": "W:WK4,8:BK10",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W8,12:BK3",
+   "white_to_move": "W:W8,12:BK3",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK7,K14:BK15",
+   "white_to_move": "W:WK7,K14:BK15",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:W8,15:BK16",
+   "white_to_move": "W:W8,15:BK16",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK4,12:BK14",
+   "white_to_move": "W:WK4,12:BK14",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK10,17:BK9",
+   "white_to_move": "W:WK10,17:BK9",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "three pieces"
+  },
+  {
+   "black_to_move": "B:WK9,K11:BK12,K30",
+   "white_to_move": "W:WK9,K11:BK12,K30",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK10,K24:BK11,K30",
+   "white_to_move": "W:WK10,K24:BK11,K30",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK4,K19:BK18,K27",
+   "white_to_move": "W:WK4,K19:BK18,K27",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK13,K26:BK2,K25",
+   "white_to_move": "W:WK13,K26:BK2,K25",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK17,K31:BK15,K23",
+   "white_to_move": "W:WK17,K31:BK15,K23",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK22,K31:BK11,K30",
+   "white_to_move": "W:WK22,K31:BK11,K30",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK16,K29:BK8,K15",
+   "white_to_move": "W:WK16,K29:BK8,K15",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK7,K29:BK18,K32",
+   "white_to_move": "W:WK7,K29:BK18,K32",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK23,K27:BK16,K25",
+   "white_to_move": "W:WK23,K27:BK16,K25",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK17,K26:BK4,K25",
+   "white_to_move": "W:WK17,K26:BK4,K25",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK2,K25:BK14,K17",
+   "white_to_move": "W:WK2,K25:BK14,K17",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK8,K25:BK23,K24",
+   "white_to_move": "W:WK8,K25:BK23,K24",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK4,K22:BK9,K14",
+   "white_to_move": "W:WK4,K22:BK9,K14",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK21,K30:BK14,K27",
+   "white_to_move": "W:WK21,K30:BK14,K27",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK4,K17:BK10,K30",
+   "white_to_move": "W:WK4,K17:BK10,K30",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK3,K25:BK13,K15",
+   "white_to_move": "W:WK3,K25:BK13,K15",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK4,K12:BK3,K18",
+   "white_to_move": "W:WK4,K12:BK3,K18",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK10,K19:BK17,K20",
+   "white_to_move": "W:WK10,K19:BK17,K20",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK10,K18:BK2,K11",
+   "white_to_move": "W:WK10,K18:BK2,K11",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK4,K22:BK10,K20",
+   "white_to_move": "W:WK4,K22:BK10,K20",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK13,K32:BK12,K21",
+   "white_to_move": "W:WK13,K32:BK12,K21",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK9,K18:BK10,K27",
+   "white_to_move": "W:WK9,K18:BK10,K27",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK11,K15:BK4,K26",
+   "white_to_move": "W:WK11,K15:BK4,K26",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK3,K25:BK11,K14",
+   "white_to_move": "W:WK3,K25:BK11,K14",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK4,K30:BK16,K18",
+   "white_to_move": "W:WK4,K30:BK16,K18",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK4,K29:BK12,K13",
+   "white_to_move": "W:WK4,K29:BK12,K13",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK4,K25:BK2,K6",
+   "white_to_move": "W:WK4,K25:BK2,K6",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK3,K15:BK12,K29",
+   "white_to_move": "W:WK3,K15:BK12,K29",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK16,K29:BK7,K23",
+   "white_to_move": "W:WK16,K29:BK7,K23",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK1,K23:BK3,K17",
+   "white_to_move": "W:WK1,K23:BK3,K17",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK23,K31:BK4,K22",
+   "white_to_move": "W:WK23,K31:BK4,K22",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK4,K13:BK5,K31",
+   "white_to_move": "W:WK4,K13:BK5,K31",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK12,K24:BK4,K26",
+   "white_to_move": "W:WK12,K24:BK4,K26",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK14,K15:BK4,K25",
+   "white_to_move": "W:WK14,K15:BK4,K25",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK9,K24:BK2,K25",
+   "white_to_move": "W:WK9,K24:BK2,K25",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK2,K23:BK4,K29",
+   "white_to_move": "W:WK2,K23:BK4,K29",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:WK22,K24:BK29,K31",
+   "white_to_move": "W:WK22,K24:BK29,K31",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two kings each"
+  },
+  {
+   "black_to_move": "B:W22,27:B4,K11",
+   "white_to_move": "W:W22,27:B4,K11",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK12,16:BK4,17",
+   "white_to_move": "W:WK12,16:BK4,17",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK10,21:BK5,K18",
+   "white_to_move": "W:WK10,21:BK5,K18",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W7,29:BK15,26",
+   "white_to_move": "W:W7,29:BK15,26",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W26,30:B3,21",
+   "white_to_move": "W:W26,30:B3,21",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W16,25:BK10,K28",
+   "white_to_move": "W:W16,25:BK10,K28",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W27,29:BK3,5",
+   "white_to_move": "W:W27,29:BK3,5",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W20,30:BK5,23",
+   "white_to_move": "W:W20,30:BK5,23",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W10,19:B12,K28",
+   "white_to_move": "W:W10,19:B12,K28",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W17,26:B10,K27",
+   "white_to_move": "W:W17,26:B10,K27",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK17,K31:BK18,25",
+   "white_to_move": "W:WK17,K31:BK18,25",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W15,17:BK3,25",
+   "white_to_move": "W:W15,17:BK3,25",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK5,K24:BK8,18",
+   "white_to_move": "W:WK5,K24:BK8,18",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W12,29:BK9,K31",
+   "white_to_move": "W:W12,29:BK9,K31",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK10,K12:B9,K18",
+   "white_to_move": "W:WK10,K12:B9,K18",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK8,30:B9,21",
+   "white_to_move": "W:WK8,30:B9,21",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK10,29:BK5,K16",
+   "white_to_move": "W:WK10,29:BK5,K16",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK12,22:B9,14",
+   "white_to_move": "W:WK12,22:B9,14",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W15,K28:B12,16",
+   "white_to_move": "W:W15,K28:B12,16",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W11,32:BK1,17",
+   "white_to_move": "W:W11,32:BK1,17",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK4,27:B3,K26",
+   "white_to_move": "W:WK4,27:B3,K26",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK5,K23:B1,K22",
+   "white_to_move": "W:WK5,K23:B1,K22",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK10,K26:BK4,21",
+   "white_to_move": "W:WK10,K26:BK4,21",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK27,28:BK4,K15",
+   "white_to_move": "W:WK27,28:BK4,K15",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W17,K26:BK2,K32",
+   "white_to_move": "W:W17,K26:BK2,K32",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W6,K23:BK4,9",
+   "white_to_move": "W:W6,K23:BK4,9",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W31,K32:B9,13",
+   "white_to_move": "W:W31,K32:B9,13",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W24,K30:B1,3",
+   "white_to_move": "W:W24,K30:B1,3",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W16,21:BK2,24",
+   "white_to_move": "W:W16,21:BK2,24",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK4,13:B5,K28",
+   "white_to_move": "W:WK4,13:B5,K28",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W5,K16:BK4,21",
+   "white_to_move": "W:W5,K16:BK4,21",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W13,18:BK19,K27",
+   "white_to_move": "W:W13,18:BK19,K27",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK16,17:BK18,K31",
+   "white_to_move": "W:WK16,17:BK18,K31",
+   "black_result": [
+    0,
+    1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:WK2,K17:B8,K25",
+   "white_to_move": "W:WK2,K17:B8,K25",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W13,K18:B11,25",
+   "white_to_move": "W:W13,K18:B11,25",
+   "black_result": [
+    0,
+    -1
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W11,K13:BK6,K23",
+   "white_to_move": "W:W11,K13:BK6,K23",
+   "black_result": [
+    1,
+    0
+   ],
+   "group": "two against two, men"
+  },
+  {
+   "black_to_move": "B:W11,K19:B4,26",
+   "white_to_move": "W:W11,K19:B4,26",
+   "black_result": [
+    -1,
+    0
+   ],
+   "group": "two against two, men"
+  }
+ ],
+ "deep_wins": [
+  {
+   "fen": "W:W25,29:BK1",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK5,25:BK1,K2",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK3,K7:BK2,K4",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W25,29:BK2",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK5,25:BK1,K3",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK3,K15:BK2,K4",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W25,29:BK3",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK22,25:BK1,K9",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK2,K4:BK3,K7",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W25,29:BK4",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W25,K30:BK1,K9",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK2,K4:BK3,K15",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W25,29:BK9",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK17,22:BK1,K10",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK12,K15:BK4,K20",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W25,29:BK10",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK13,18:BK1,K11",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK12,K16:BK4,K20",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W25,29:BK11",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:W18,K22:BK1,K11",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK4,K20:BK12,K15",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W25,30:BK11",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK9,22:BK1,K11",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK4,K20:BK12,K16",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W25,31:BK11",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK5,25:BK1,K11",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK17,K21:BK13,K29",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W26,29:BK11",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK14,25:BK1,K11",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK18,K21:BK13,K29",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W26,30:BK11",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK14,26:BK1,K11",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK13,K29:BK17,K21",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W27,29:BK11",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK11,22:BK1,K12",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK13,K29:BK18,K21",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W25,29:BK12",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK15,25:BK1,K12",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK29,K31:BK18,K30",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W25,30:BK12",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK7,26:BK1,K12",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK29,K31:BK26,K30",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W26,29:BK12",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK9,29:BK1,K18",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK18,K30:BK29,K31",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W26,30:BK12",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK10,29:BK1,K18",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK26,K30:BK29,K31",
+   "value": 1,
+   "dtw": 49,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W27,29:BK12",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK9,30:BK1,K18",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "B:WK4,K7:BK3,K10",
+   "value": 1,
+   "dtw": 47,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W26,29:BK17",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK10,30:BK1,K18",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK3,K10:BK4,K7",
+   "value": 1,
+   "dtw": 47,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W27,29:BK17",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK5,25:BK1,K19",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK7,K14:BK4,K8",
+   "value": 1,
+   "dtw": 47,
+   "group": "two kings each"
+  },
+  {
+   "fen": "W:W27,30:BK17",
+   "value": 1,
+   "dtw": 59,
+   "group": "three pieces"
+  },
+  {
+   "fen": "B:WK10,29:BK1,K19",
+   "value": 1,
+   "dtw": 59,
+   "group": "two against two, men"
+  },
+  {
+   "fen": "W:WK7,K22:BK4,K8",
+   "value": 1,
+   "dtw": 47,
+   "group": "two kings each"
+  }
+ ]
+}

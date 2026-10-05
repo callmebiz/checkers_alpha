@@ -69,7 +69,14 @@ class TrainConfig:
     iterations: int = 100
     batch_size: int = 512
     lr: float = 2e-3  # peak learning rate, reached after warmup
-    lr_min: float = 1e-4  # end of the cosine decay over all iterations
+    lr_min: float = 1e-4  # end of the cosine decay; floor of the steps
+    # 'cosine': decay from lr to lr_min over the run (its iterations or
+    # time budget). 'step': open-ended, for runs extended at will: lr,
+    # times lr_step_factor after every lr_step_hours of training, never
+    # below lr_min (a time budget then only says when to stop).
+    lr_schedule: str = 'cosine'
+    lr_step_hours: float = 24.0
+    lr_step_factor: float = 0.5
     warmup_steps: int = 200
     weight_decay: float = 1e-4
     value_weight: float = 1.0  # value loss weight relative to policy loss
@@ -80,6 +87,10 @@ class TrainConfig:
     buffer_size: int = 300_000
     min_buffer: int = 5_000  # don't train until this many samples exist
     checkpoint_every: int = 5
+    # Stop after this many hours of training (0: ``iterations`` decides).
+    # With a budget, the learning-rate schedule follows elapsed time, so
+    # runs of different speeds anneal over the same hours.
+    time_budget_hours: float = 0.0
 
 
 @dataclass
@@ -166,6 +177,35 @@ def _build(cls: type, values: dict[str, Any], section: str) -> Any:
     if unknown:
         raise ValueError(f'Unknown keys in {section!r}: {sorted(unknown)}')
     return cls(**values)
+
+
+def changed_config(
+    config: RunConfig, overrides: list[str]
+) -> tuple[RunConfig, list[str]]:
+    """``config`` with ``overrides`` applied, for resuming a run, and the
+    changes as text (``train.lr: 0.002 -> 0.001``).
+
+    The network's shape can't change mid-run: ``model.*`` overrides raise
+    ``ValueError``, as do unknown keys.
+    """
+    before = config.to_dict()
+    data = json.loads(json.dumps(before))  # a deep copy
+    apply_overrides(data, overrides)
+    new = RunConfig.from_dict(data)  # checks the keys
+    after = new.to_dict()
+    if after['model'] != before['model']:
+        raise ValueError("a run's network shape can't change")
+    changes = []
+    for section, values in after.items():
+        if not isinstance(values, dict):
+            if values != before[section]:
+                changes.append(f'{section}: {before[section]} -> {values}')
+            continue
+        for key, value in values.items():
+            if value != before[section].get(key):
+                old = before[section].get(key)
+                changes.append(f'{section}.{key}: {old} -> {value}')
+    return new, changes
 
 
 def apply_overrides(data: dict[str, Any], overrides: list[str]) -> None:

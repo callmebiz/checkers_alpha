@@ -47,6 +47,7 @@ the model, optimiser, replay buffer, counters and random state from
 
 from __future__ import annotations
 
+import json
 import math
 import time
 from dataclasses import asdict
@@ -76,6 +77,7 @@ from training.logs import (
     event,
     iteration_line,
     iteration_report,
+    planned,
     postfix,
     probe_report,
     run_header,
@@ -168,6 +170,10 @@ class Trainer:
         )
         # Worker processes for self-play, started by run() when configured
         self.actors: ActorPool | None = None
+        # Training time: before this process (from the checkpoint) + since
+        # run() started. Survives resuming, for time budgets and the logs.
+        self._elapsed_before = 0.0
+        self._run_start: float | None = None
         # 'auto' backend trial: sims/s measured per backend (see _try_backend)
         self._trial: dict[str, float] = {}
         self._trial_step = 0
@@ -212,7 +218,7 @@ class Trainer:
         event(
             self.log,
             'RUN',
-            f'{verb} {root}: {cfg.iterations} iterations on {self.device}; '
+            f'{verb} {root}: {planned(cfg)} on {self.device}; '
             f'full log in {root / "train.log"}',
             to='console',
         )
@@ -221,7 +227,7 @@ class Trainer:
         self.progress = Progress(cfg.iterations, self.iteration, progress_bars)
         workers = self.config.self_play.workers
         built = self.evaluator.prepare()  # e.g. the TensorRT engine
-        note = f', engine built in {built:.0f} s' if built else ''
+        note = f', engine built in {built:.0f} s' if built >= 0.5 else ''
         what = self.evaluator.describe()
         if len(self.evaluator.candidates()) > 1:
             what = 'auto: trying CUDA graphs and TensorRT on iterations 2-3'
@@ -230,20 +236,57 @@ class Trainer:
             if workers > 0 and self.iteration < cfg.iterations:
                 event(self.log, 'RUN', f'starting {workers} self-play workers')
                 self.actors = ActorPool(self.config, workers)
-            while self.iteration < cfg.iterations:
+            self._run_start = time.monotonic()
+            stop = False  # asked to stop (control.json)
+            while (
+                self.iteration < cfg.iterations
+                and not self._out_of_time()
+                and not stop
+            ):
                 self.run_iteration()
+                stop = self._stop_requested()
                 done = self.iteration - 1
-                last = self.iteration == cfg.iterations
+                last = (
+                    self.iteration == cfg.iterations
+                    or self._out_of_time()
+                    or stop
+                )
                 every = self.config.arena.every
-                arena_due = every > 0 and (self.iteration % every == 0 or last)
+                # a stop request skips the final evaluation, to stop fast
+                arena_due = every > 0 and (
+                    self.iteration % every == 0 or (last and not stop)
+                )
                 checkpoint_due = self.iteration % cfg.checkpoint_every == 0
                 if last or arena_due or checkpoint_due:
                     self.save()  # also the arena's next "previous" opponent
                 if arena_due:
                     self.run_arena(done)
+            if stop:
+                self._status('stopped', force=True)
+                self.progress.close()
+                event(
+                    self.log,
+                    'RUN',
+                    f'stopped on request after iteration {self.iteration} '
+                    f'({self.elapsed() / 3600:.2f} h of training); '
+                    f'continue with: python train.py --resume '
+                    f'{self.store.root}',
+                    to='both',
+                )
+                return
             self._status('finished', force=True)
             self.progress.close()
-            event(self.log, 'RUN', f'finished {cfg.iterations} iterations')
+            hours = self.elapsed() / 3600
+            if self._out_of_time():
+                why = f'time budget of {cfg.time_budget_hours:g} h reached'
+            else:
+                why = f'all {cfg.iterations} iterations done'
+            event(
+                self.log,
+                'RUN',
+                f'finished: {why} after {self.iteration} iterations, '
+                f'{hours:.2f} h of training',
+            )
         except KeyboardInterrupt:
             self.progress.close()
             event(self.log, 'RUN', 'interrupted')
@@ -319,12 +362,13 @@ class Trainer:
             'train_seconds': round(train_seconds, 2),
             'probe_seconds': round(probe_seconds, 2),
             'step': self.step,
+            'elapsed_hours': round(self.elapsed() / 3600, 4),
             'lr': self._lr(),
             'memory': memory_snapshot(self.device),
             **train_stats,
         }
         self.store.append_metrics(row)
-        iterations = cfg.train.iterations
+        iterations = self._planned_iterations()
         event(self.log, 'ITER', iteration_report(row, cfg), to='file')
         if probe_results is not None:
             report = probe_report(i, iterations, *probe_results)
@@ -472,7 +516,7 @@ class Trainer:
             f'arena_{i:04d}', (g for r in results for g in r.games)
         )
         self.progress.end_phase()
-        iterations = self.config.train.iterations
+        iterations = self._planned_iterations()
         report = arena_report(row, iterations, self.last_elo)
         event(self.log, 'ARENA', report, to='file')
         event(self.log, 'ARENA', arena_line(row, iterations), to='console')
@@ -536,13 +580,42 @@ class Trainer:
         wdl = to(batch.wdl.astype(np.int64))
         return x, target, mask, wdl
 
+    def _planned_iterations(self) -> int:
+        """Iterations the run is set to do (0 when a time budget ends it,
+        so logs don't show a meaningless total)."""
+        t = self.config.train
+        return 0 if t.time_budget_hours > 0 else t.iterations
+
+    def elapsed(self) -> float:
+        """Seconds of training so far, across resumes."""
+        if self._run_start is None:
+            return self._elapsed_before
+        return self._elapsed_before + time.monotonic() - self._run_start
+
+    def _out_of_time(self) -> bool:
+        """Whether the time budget (if any) is used up."""
+        budget = self.config.train.time_budget_hours
+        return budget > 0 and self.elapsed() >= budget * 3600
+
     def _lr(self) -> float:
-        """Warmup by step, then cosine decay by iteration."""
+        """Warmup by step, then the schedule (see ``TrainConfig``): cosine
+        decay over the run (by elapsed time when there's a time budget,
+        else by iteration), or open-ended steps down every few hours."""
         cfg = self.config.train
-        progress = self.iteration / max(cfg.iterations, 1)
+        warmup = min(1.0, (self.step + 1) / max(cfg.warmup_steps, 1))
+        if cfg.lr_schedule == 'step':
+            steps = math.floor(self.elapsed() / 3600 / cfg.lr_step_hours)
+            lr = cfg.lr * cfg.lr_step_factor**steps
+            return max(cfg.lr_min, lr) * warmup
+        if cfg.lr_schedule != 'cosine':
+            raise ValueError(f'unknown lr_schedule {cfg.lr_schedule!r}')
+        if cfg.time_budget_hours > 0:
+            progress = min(1.0, self.elapsed() / (cfg.time_budget_hours * 3600))
+        else:
+            progress = self.iteration / max(cfg.iterations, 1)
         cosine = 0.5 * (1 + math.cos(math.pi * progress))
         lr = cfg.lr_min + (cfg.lr - cfg.lr_min) * cosine
-        return lr * min(1.0, (self.step + 1) / max(cfg.warmup_steps, 1))
+        return lr * warmup
 
     def _try_backend(self) -> str | None:
         """Pick this iteration's backend while ``auto`` is still deciding.
@@ -619,12 +692,17 @@ class Trainer:
             'model_config': asdict(self.config.model),
             'model_state': self.model.state_dict(),
             'iteration': done,
+            'elapsed': self.elapsed(),  # seconds of training so far
             'config': self.config.to_dict(),
         }
         full = {
             **weights,
             'optimizer_state': self.optimizer.state_dict(),
             'step': self.step,
+            # the backend 'auto' settled on, so a resume can skip the trial
+            'backend': None
+            if len(self.evaluator.candidates()) > 1
+            else self.evaluator.backend,
             'rng': {
                 'numpy': self.rng.bit_generator.state,
                 'torch': torch.get_rng_state(),
@@ -647,6 +725,22 @@ class Trainer:
         )
         return path
 
+    def _stop_requested(self) -> bool:
+        """Whether ``control.json`` in the run directory asks to stop
+        (``{"stop": true}``); the request is consumed."""
+        path = self.store.root / 'control.json'
+        if not path.exists():
+            return False
+        try:
+            request = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return False  # half-written: look again next iteration
+        if not request.get('stop'):
+            return False
+        path.unlink(missing_ok=True)
+        event(self.log, 'RUN', 'stop requested (control.json)', to='file')
+        return True
+
     def _restore(self, ckpt: dict[str, Any]) -> None:
         """Load model, optimiser, counters, RNG and buffer from ``ckpt``."""
         self.model.load_state_dict(ckpt['model_state'])
@@ -655,6 +749,14 @@ class Trainer:
         self.iteration = ckpt['iteration'] + 1
         self.saved_iteration = ckpt['iteration']
         self.step = ckpt['step']
+        self._elapsed_before = ckpt.get('elapsed', 0.0)
+        # keep the backend 'auto' chose last session (no new trial)
+        backend = ckpt.get('backend')
+        if (
+            backend in self.evaluator.candidates()
+            and len(self.evaluator.candidates()) > 1
+        ):
+            self.evaluator.settle(backend, 'chosen in an earlier session')
         rng = ckpt['rng']
         self.rng.bit_generator.state = rng['numpy']
         torch.set_rng_state(rng['torch'])

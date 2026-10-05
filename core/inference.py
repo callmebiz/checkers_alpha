@@ -534,7 +534,14 @@ def _tensorrt_available() -> bool:
 def _quiet_tensorrt() -> Iterator[None]:
     """Silence torch_tensorrt's import and build chatter (warnings about
     optional extras, progress logs)."""
-    loggers = [logging.getLogger(n) for n in ('torch_tensorrt', 'torch')]
+    names = (
+        'torch_tensorrt',
+        # not a child of the above (no dot): TensorRT's own messages, e.g.
+        # 'The logger passed into createInferRuntime differs' on each refit
+        'torch_tensorrt [TensorRT Conversion Context]',
+        'torch',
+    )
+    loggers = [logging.getLogger(n) for n in names]
     levels = [lg.level for lg in loggers]
     for lg in loggers:
         lg.setLevel(logging.ERROR)

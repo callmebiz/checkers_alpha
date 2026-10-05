@@ -384,6 +384,38 @@ class SearchTree:
                 self.root.P = self.root.P_raw
 
 
+def search_wdl(node: Node) -> tuple[float, float, float] | None:
+    """The search's win/draw/loss for the side to move at ``node``.
+
+    The search itself keeps one value per move (win minus loss), but each
+    position it reached has the network's win/draw/loss; averaging those
+    over the tree, weighted by visits, gives the search's view with draws
+    kept apart. Its win minus loss equals the node's Q. Mid-exchange
+    positions show why it matters: right after a capture with a forced
+    recapture coming, the network alone sees a piece up; the search has
+    already played the recapture. None for an unexamined position.
+    """
+    if node.terminal is not None:  # lost (-1) or drawn (0)
+        return (0.0, 1.0, 0.0) if node.terminal == 0 else (0.0, 0.0, 1.0)
+    if not node.expanded or node.wdl is None:
+        return None
+    total = [float(x) for x in node.wdl]
+    weight = 1
+    for i, child in enumerate(node.children):
+        if child is None or not node.N[i]:
+            continue
+        sub = search_wdl(child)
+        if sub is None:
+            continue
+        if child.pos.turn != node.pos.turn:  # the other side's view
+            sub = (sub[2], sub[1], sub[0])
+        for k in range(3):
+            total[k] += node.N[i] * sub[k]
+        weight += node.N[i]
+    w, d, lo = (x / weight for x in total)
+    return w, d, lo
+
+
 def run_search(
     trees: Sequence[SearchTree],
     evaluator: Evaluator,

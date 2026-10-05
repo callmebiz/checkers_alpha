@@ -356,18 +356,27 @@ def _play_arena(
     tasks: list[tuple[int, str, str, str]],
 ) -> list[dict[str, Any]]:
     """Play this worker's share of an arena: ``tasks`` are ``(id, opening
-    FEN, Black, White)``, each side ``'net'`` (current network), ``'prev'``
-    (previous checkpoint) or a player spec such as ``'ab:4'``."""
+    FEN, Black, White)``. Each side is ``'net'`` (model 0, the current
+    network), ``'prev'`` (model 1, the previous checkpoint), ``'model:K'``
+    or ``'model:K:SIMS'`` (model K, with its own search budget; 1 means
+    the raw network), or a player spec such as ``'ab:4'``. Network sides
+    are named by ``settings['names'][spec]``."""
     contestants: dict[str, Contestant] = {}
 
     def contestant(spec: str) -> Contestant:
         """One contestant per spec, so their searches batch together."""
         if spec not in contestants:
+            model = sims = None
             if spec in ('net', 'prev'):
-                model = 0 if spec == 'net' else 1
+                model, sims = (0 if spec == 'net' else 1), settings['sims']
+            elif spec.startswith('model:'):
+                parts = spec.split(':')
+                model = int(parts[1])
+                sims = int(parts[2]) if len(parts) > 2 else settings['sims']
+            if model is not None and sims is not None:
                 remote = RemoteEvaluator(index, slots, mailbox, model, free)
                 contestants[spec] = Contestant.network(
-                    settings['names'][spec], remote, settings['sims']
+                    settings['names'][spec], remote, sims
                 )
             else:
                 player = make_player(spec, seed=settings['seed'])

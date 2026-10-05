@@ -12,7 +12,12 @@ from core.inference import NetEvaluator
 from core.mcts import SearchConfig
 from core.model import CheckersNet, ModelConfig
 from core.players import MCTSPlayer, make_player
-from training.config import RunConfig, SelfPlayConfig, apply_overrides
+from training.config import (
+    RunConfig,
+    SelfPlayConfig,
+    apply_overrides,
+    changed_config,
+)
 from training.replay_buffer import DRAW, LOSS, WIN, ReplayBuffer, Samples
 from training.run_store import RunStore
 from training.self_play import SelfPlay
@@ -308,3 +313,80 @@ def test_auto_backend_trial_picks_the_faster(tmp_path, monkeypatch):
     trainer2._trial_result('tensorrt', 102_000.0)
     trainer2._trial_result('graphs', 100_000.0)
     assert settled[-1] == 'graphs'
+
+
+def test_time_budget_stops_and_survives_resume(tmp_path):
+    """A time budget ends the run however many iterations are left, the
+    learning rate follows the budget, and resuming keeps the time used."""
+    config = tiny_config()
+    config.train.iterations = 1000
+    config.train.time_budget_hours = 1e-9  # used up by the first iteration
+    run = tmp_path / 'run'
+    trainer = Trainer.new(config, run)
+    trainer.run()
+    assert trainer.iteration == 1  # the first iteration always runs
+    store = RunStore.open(run)
+    rows = store.read_metrics()
+    assert len(rows) == 1 and rows[0]['elapsed_hours'] >= 0
+    assert json.loads(store.status_path.read_text())['phase'] == 'finished'
+    assert store.list_checkpoints()  # the last iteration was saved
+
+    resumed = Trainer.resume(run)
+    assert resumed.elapsed() > 0
+    resumed.run()  # out of time already: nothing more to do
+    assert resumed.iteration == 1 and len(store.read_metrics()) == 1
+
+    # half the budget gone = half way down the cosine (past warmup)
+    resumed._run_start, resumed._elapsed_before = None, 1800.0
+    resumed.config.train.time_budget_hours = 1.0
+    resumed.step = 10**6
+    t = resumed.config.train
+    assert resumed._lr() == pytest.approx((t.lr + t.lr_min) / 2)
+
+
+def test_step_schedule_steps_down_by_training_hours(tmp_path):
+    """Open-ended schedule: lr, halved every 24 h of training, floored."""
+    config = tiny_config()
+    config.train.lr_schedule = 'step'
+    config.train.lr, config.train.lr_min = 0.002, 0.0003
+    trainer = Trainer.new(config, tmp_path / 'run')
+    trainer.step = 10**6  # past warmup
+    for hours, lr in (
+        (0, 0.002),
+        (23.9, 0.002),
+        (24, 0.001),
+        (48, 0.0005),
+        (200, 0.0003),
+    ):
+        trainer._run_start, trainer._elapsed_before = None, hours * 3600
+        assert trainer._lr() == pytest.approx(lr)
+
+
+def test_changed_config_reports_and_refuses_shape_changes():
+    """Resume overrides list their changes; the network shape is fixed."""
+    config, changes = changed_config(
+        tiny_config(), ['train.lr=0.0005', 'self_play.sims=16']
+    )
+    assert config.train.lr == 0.0005
+    assert changes == ['self_play.sims: 8 -> 16', 'train.lr: 0.002 -> 0.0005']
+    with pytest.raises(ValueError, match='shape'):
+        changed_config(tiny_config(), ['model.channels=16'])
+    with pytest.raises(ValueError):
+        changed_config(tiny_config(), ['train.nonsense=1'])
+
+
+def test_stop_request_saves_and_stops(tmp_path):
+    """control.json {"stop": true} ends the run after the iteration, with a
+    checkpoint, and is consumed; a resume carries on from there."""
+    config = tiny_config()
+    config.train.iterations = 50
+    run = tmp_path / 'run'
+    trainer = Trainer.new(config, run)
+    (run / 'control.json').write_text('{"stop": true}')
+    trainer.run()
+    store = RunStore.open(run)
+    assert trainer.iteration == 1 and not (run / 'control.json').exists()
+    assert json.loads(store.status_path.read_text())['phase'] == 'stopped'
+    assert store.list_checkpoints()
+    resumed = Trainer.resume(run)
+    assert resumed.iteration == 1

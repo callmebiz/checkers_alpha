@@ -21,8 +21,6 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-import torch
-
 RETRY_SECONDS = 10.0
 
 
@@ -63,6 +61,8 @@ def write_text(path: Path, text: str, required: bool = True) -> bool:
 
 def torch_save(obj: Any, path: Path) -> None:
     """``torch.save`` ``obj`` to ``path`` atomically."""
+    import torch  # here, so light users of this module don't load torch
+
     tmp = tmp_path(path)
     torch.save(obj, tmp)
     replace(tmp, path)

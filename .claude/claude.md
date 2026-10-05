@@ -15,6 +15,18 @@ for playing, watching, analysing and following training.
   - `python -m ruff format .`
   - `python -m ruff check .`
   - `python -m pyright --pythonpath <env python>` (scope in pyproject.toml)
+- UI (`ui/`, React + TypeScript): run `npm run check` there (tsc,
+  Prettier, 80 columns via `scripts/check-width.mjs`, Vitest) and
+  `npm run build` before finishing. Same rules as Python: 80 columns, a
+  comment on every function (`/** ... */`), a header comment per file.
+  Browser checks: Playwright with `channel='msedge'` (installed Edge).
+- `start.bat` (via `scripts/start.ps1`) reuses a running server only if it
+  started after the last change to `server/`, `core/` or `serve.py`;
+  otherwise it stops it (and its window) and starts a fresh one. When
+  testing by hand, restart the server after changing server code.
+- Ports: `serve.py` 8020, the UI dev server 5203. Other projects in
+  `E:/Projects` run servers too: check and update the registry in
+  `E:/Projects/.claude` before changing a port.
 - Smoke-test training end to end with
   `python train.py --config configs/debug.json --run runs/debug`
   (delete `runs/debug` afterwards).
@@ -86,7 +98,26 @@ for playing, watching, analysing and following training.
 - TensorRT (optional `torch-tensorrt`): engines must be re-wrapped after a
   refit (in-place refit silently breaks the recorded CUDA graphs). Players,
   probe back-fill and the arena's previous checkpoint use `backend='graphs'`
-  to avoid an engine build.
+  to avoid an engine build. Each refit leaks ~0.65 MB of host RAM inside
+  torch-tensorrt (GPU memory stays flat; `torch._dynamo.reset()` doesn't
+  help): ~130 MB over a 4 h run, accepted.
+- Memory limit that matters on this machine is the Windows commit charge
+  (RAM + page file), not free RAM: ~34 of 47 GB is committed at idle with
+  the editor and a browser open, and a full training run adds ~10 GB.
+- The long run (`runs/long_10x128`, `experiments/long_run.py`) may be
+  training: check `runs/long_10x128/long_run.pid` / STATUS.md before any
+  GPU work, and never edit `core/`, `training/` or `train.py` while a
+  segment runs (each segment and gauntlet starts fresh processes that
+  import the files on disk). Stop it with `train_stop.bat`.
+- Skill suites (`configs/suites/*.json`) are fixed so scores compare over
+  time. Rebuilding them (`python -m training.suites build`) invalidates
+  every stored score: delete `runs/*/suites.jsonl` and re-score.
+  Endgame truth comes from `core/endgames.py` (no draw rule in the
+  values; the suites keep only results decided within 60 turns).
+- Long experiments run detached (`Start-Process`), so they survive the
+  editor session; `experiments/size_study.py` supervises its training runs
+  (restarts stalled or crashed ones from checkpoints) and writes
+  `STATUS.md`. Never start GPU work while it runs.
 - The machine is an i9-12900K (8 hyperthreaded P-cores = CPUs 0-15, 8
   E-cores = 16-23) with an RTX 3070 (8 GB), 32 GB RAM.
 

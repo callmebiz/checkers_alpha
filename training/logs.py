@@ -25,9 +25,10 @@ to=...)`` picks the destination: ``'both'``, ``'file'`` or ``'console'``.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from training.config import RunConfig
+if TYPE_CHECKING:  # types only: importing the configs pulls in torch
+    from training.config import RunConfig, TrainConfig
 
 TAG_WIDTH = 7
 
@@ -105,18 +106,44 @@ def run_header(config: RunConfig, root: str, device: str, start: int) -> str:
     )
     return '\n'.join(
         [
-            f'{what}: {root}, {t.iterations} iterations on {device}',
+            f'{what}: {root}, {planned(t)} on {device}',
             f'model     {m.blocks} blocks x {m.channels} channels, '
             f'value head {m.value_hidden}',
             f'self-play {sp.games_per_iteration} games per iteration, '
             f'{workers}, {sp.concurrent_games} in progress',
             f'search    {sp.sims} sims on {sp.full_search_prob:.0%} of moves '
             f'(recorded), {sp.fast_sims} on the rest',
-            f'train     batch {t.batch_size}, lr {t.lr:g} -> {t.lr_min:g}, '
+            f'train     batch {t.batch_size}, lr {_schedule(t)}, '
             f'buffer {t.buffer_size:,}, each sample used ~{t.sample_reuse:g}x',
             f'arena     {arena}',
         ]
     )
+
+
+def _schedule(t: TrainConfig) -> str:
+    """The learning-rate schedule in a few words."""
+    if t.lr_schedule == 'step':
+        return (
+            f'{t.lr:g} x{t.lr_step_factor:g} every {t.lr_step_hours:g} h '
+            f'(floor {t.lr_min:g})'
+        )
+    return f'{t.lr:g} -> {t.lr_min:g}'
+
+
+def of_total(done: int, total: int) -> str:
+    """Progress as ``done/total``.
+
+    Just ``done`` when ``total`` is 0: a time budget ends the run, so the
+    iteration count means nothing.
+    """
+    return f'{done}/{total}' if total > 0 else str(done)
+
+
+def planned(t: TrainConfig) -> str:
+    """How long a run is set to go: iterations, or a time budget."""
+    if t.time_budget_hours > 0:
+        return f'{t.time_budget_hours:g} h of training'
+    return f'{t.iterations} iterations'
 
 
 def iteration_report(row: dict[str, Any], config: RunConfig) -> str:
@@ -124,10 +151,14 @@ def iteration_report(row: dict[str, Any], config: RunConfig) -> str:
     sp, t = row['self_play'], config.train
     games = max(sp['games'], 1)
     batch = sp['evaluated'] / max(sp['batches'], 1)
+    total = 0 if t.time_budget_hours > 0 else t.iterations
+    budget = ''
+    if t.time_budget_hours > 0 and 'elapsed_hours' in row:
+        budget = f'  [{row["elapsed_hours"]:.2f} of {t.time_budget_hours:g} h]'
     lines = [
-        f'{row["iteration"] + 1}/{t.iterations} in {row["seconds"]:.1f} s  '
+        f'{of_total(row["iteration"] + 1, total)} in {row["seconds"]:.1f} s  '
         f'(self-play {sp["seconds"]:.1f}, train {row["train_seconds"]:.1f}, '
-        f'probes {row["probe_seconds"]:.1f})',
+        f'probes {row["probe_seconds"]:.1f}){budget}',
         f'games     {sp["games"]:<5}  black {sp["black_wins"]:<4} '
         f'white {sp["white_wins"]:<4} draws {sp["draws"]:<4} '
         f'({sp["draws"] / games:.0%})',
@@ -169,8 +200,12 @@ def iteration_report(row: dict[str, Any], config: RunConfig) -> str:
 def iteration_line(row: dict[str, Any], iterations: int) -> str:
     """The one-line ``ITER`` entry for the console (when bars are off)."""
     sp = row['self_play']
+    # with a time budget (no total), the hours trained show progress
+    hours = ''
+    if iterations <= 0 and 'elapsed_hours' in row:
+        hours = f' [{row["elapsed_hours"]:.2f} h]'
     text = (
-        f'{row["iteration"] + 1}/{iterations}  '
+        f'{of_total(row["iteration"] + 1, iterations)}{hours}  '
         f'B/W/D {sp["black_wins"]}/{sp["white_wins"]}/{sp["draws"]}  '
         f'{row["sims_per_second"] / 1000:.1f}k sims/s'
     )
@@ -189,7 +224,7 @@ def probe_report(
 ) -> str:
     """The ``PROBES`` entry: one table row per probe."""
     lines = [
-        f'after {iteration + 1}/{iterations}',
+        f'after {of_total(iteration + 1, iterations)}',
         f'{"probe":<20} {"best":<8} {"expected":<14} {"net":>6} {"search":>7}',
     ]
     for name, r in results.items():
@@ -218,7 +253,8 @@ def arena_report(
     if elo is not None and previous_elo is not None:
         change = f' ({elo - previous_elo:+.0f})'
     lines = [
-        f'after {row["iteration"] + 1}/{iterations} in {row["seconds"]:.0f} s: '
+        f'after {of_total(row["iteration"] + 1, iterations)} in '
+        f'{row["seconds"]:.0f} s: '
         f'Elo {elo if elo is not None else "n/a"}{change}',
         f'{"opponent":<14} {"won":>4} {"drawn":>6} {"lost":>5} '
         f'{"score":>6} {"Elo diff":>9}',
@@ -238,7 +274,7 @@ def arena_line(row: dict[str, Any], iterations: int) -> str:
         for r in row['results']
     )
     return (
-        f'after {row["iteration"] + 1}/{iterations}: {scores}  '
+        f'after {of_total(row["iteration"] + 1, iterations)}: {scores}  '
         f'Elo {row["elo"] if row["elo"] is not None else "n/a"}'
     )
 
